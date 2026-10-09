@@ -1,5 +1,9 @@
+<div align="center">
+
 # fiscus
 
-Accounting :D
+**Personal Financial Tracker, powered by Zig.**
+
+</div>
 
 Required Zig version: `0.17.0`
