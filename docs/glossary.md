@@ -23,15 +23,15 @@ It is roughly equivalent to an accounting book or ledger file.
 An **account** is a named bucket used to classify value.
 
 ```fis
-account assets:bank        asset
-account expenses:groceries expense
+account asset:bank
+account expense:food:groceries
 ```
 
-Account names are hierarchical:
+Account names are hierarchical, and their first component determines their type:
 
-- `assets`
-- `assets:bank`
-- `assets:brokerage:cash`
+- `asset`
+- `asset:bank`
+- `asset:brokerage:cash`
 
 The colon-separated components allow related accounts to be grouped and summarized.
 
@@ -43,8 +43,8 @@ A **transaction** records one financial event.
 
 ```fis
 transaction groceries-001 2026-01-17 "Groceries" {
-    debit  expenses:groceries 82.40 AUD
-    credit assets:bank        82.40 AUD
+    debit  expense:food:groceries 82.40 AUD
+    credit asset:bank             82.40 AUD
 }
 ```
 
@@ -62,13 +62,13 @@ The whole transaction must balance.
 A **posting** is one line inside a transaction. It records a change to one account.
 
 ```fis
-debit expenses:groceries 82.40 AUD
+debit expense:food:groceries 82.40 AUD
 ```
 
 This posting has:
 
 - a direction: debit
-- an account: `expenses:groceries`
+- an account: `expense:food:groceries`
 - an amount: `82.40`
 - a commodity: `AUD`
 
@@ -87,8 +87,8 @@ For example, buying groceries is one transaction with two postings:
 Every transaction affects at least two accounts, and total debits must equal total credits.
 
 ```fis
-debit  expenses:groceries 82.40 AUD
-credit assets:bank        82.40 AUD
+debit  expense:food:groceries 82.40 AUD
+credit asset:bank             82.40 AUD
 ```
 
 This does **not** mean money was duplicated. It records both sides of the same event:
@@ -99,8 +99,8 @@ This does **not** mean money was duplicated. It records both sides of the same e
 An **unbalanced transaction** is invalid:
 
 ```fis
-debit  expenses:groceries 20.00 AUD
-credit assets:bank        19.00 AUD
+debit  expense:food:groceries 20.00 AUD
+credit asset:bank             19.00 AUD
 ```
 
 ## Debit and Credit
@@ -118,7 +118,7 @@ credit assets:bank        19.00 AUD
 For example:
 
 ```fis
-debit  assets:bank   3000.00 AUD
+debit  asset:bank    3000.00 AUD
 credit income:salary 3000.00 AUD
 ```
 
@@ -142,7 +142,7 @@ Examples:
 - property
 
 ```fis
-account assets:bank asset
+account asset:bank
 ```
 
 Assets increase with debits and decrease with credits.
@@ -159,7 +159,7 @@ Examples:
 - loans
 
 ```fis
-account liabilities:credit-card liability
+account liability:credit-card
 ```
 
 Liabilities increase with credits and decrease with debits.
@@ -167,8 +167,8 @@ Liabilities increase with credits and decrease with debits.
 A credit-card purchase might be:
 
 ```fis
-debit  expenses:groceries       82.40 AUD
-credit liabilities:credit-card 82.40 AUD
+debit  expense:food:groceries 82.40 AUD
+credit liability:credit-card  82.40 AUD
 ```
 
 ### Equity
@@ -186,13 +186,13 @@ Examples include:
 - opening balances
 
 ```fis
-account equity:opening-balances equity
+account equity:opening-balances
 ```
 
 An opening balance uses equity to explain where an existing asset balance came from:
 
 ```fis
-debit  assets:bank             1000.00 AUD
+debit  asset:bank               1000.00 AUD
 credit equity:opening-balances 1000.00 AUD
 ```
 
@@ -208,7 +208,7 @@ Examples:
 - sales revenue
 
 ```fis
-account income:salary income
+account income:salary
 ```
 
 Income increases with credits.
@@ -225,7 +225,7 @@ Examples:
 - transport
 
 ```fis
-account expenses:groceries expense
+account expense:food:groceries
 ```
 
 Expenses increase with debits.
@@ -253,9 +253,9 @@ An account's **balance** is the net result of all postings made to it.
 Given:
 
 ```fis
-debit  assets:bank 1000.00 AUD
-debit  assets:bank 3000.00 AUD
-credit assets:bank   82.40 AUD
+debit  asset:bank 1000.00 AUD
+debit  asset:bank 3000.00 AUD
+credit asset:bank   82.40 AUD
 ```
 
 The bank balance is:
@@ -348,7 +348,7 @@ USD is the quote currency.
 The `@` notation gives a price or conversion rate:
 
 ```fis
-debit assets:brokerage:aapl 10 AAPL @ 180.00 USD
+debit asset:brokerage:aapl 10 AAPL @ 180.00 USD
 ```
 
 This means:
@@ -360,7 +360,7 @@ This means:
 Similarly:
 
 ```fis
-debit assets:bank:nzd 108.25 NZD @ 0.92378753 AUD
+debit asset:bank:nzd 108.25 NZD @ 0.92378753 AUD
 ```
 
 means each NZD is valued at approximately `0.92378753 AUD`, making the posting worth about `100 AUD`.
@@ -375,7 +375,7 @@ The quantity and valuation commodity are different:
 An **opening balance** records value that existed before the journal began.
 
 ```fis
-debit  assets:bank             1000.00 AUD
+debit  asset:bank               1000.00 AUD
 credit equity:opening-balances 1000.00 AUD
 ```
 
@@ -393,7 +393,7 @@ The ledger view asks:
 
 > What happened to this particular account?
 
-For example, the `assets:bank` ledger would contain every posting involving that account.
+For example, the `asset:bank` ledger would contain every posting involving that account.
 
 ## Reports
 

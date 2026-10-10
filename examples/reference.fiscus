@@ -3,22 +3,22 @@
 meta version 1
 meta journal "personal"
 
-account assets:bank             asset
-account equity:opening-balances equity
-account income:salary           income
-account expenses:groceries      expense
+account asset:bank:example-bank:au:everyday
+account equity:opening-balances
+account income:employment:example-employer:salary
+account expense:food:groceries
 
 transaction 2026-01-01 "Opening balance" {
-    debit  assets:bank             1000.00 AUD
-    credit equity:opening-balances 1000.00 AUD
+    debit  asset:bank:example-bank:au:everyday 1000.00 AUD
+    credit equity:opening-balances              1000.00 AUD
 }
 
 transaction 2026-01-15 "January salary" {
-    debit  assets:bank   3000.00 AUD
-    credit income:salary 3000.00 AUD
+    debit  asset:bank:example-bank:au:everyday       3000.00 AUD
+    credit income:employment:example-employer:salary 3000.00 AUD
 }
 
 transaction 2026-01-17 "Groceries" {
-    debit  expenses:groceries 82.40 AUD
-    credit assets:bank        82.40 AUD
+    debit  expense:food:groceries                    82.40 AUD
+    credit asset:bank:example-bank:au:everyday       82.40 AUD
 }
