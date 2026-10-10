@@ -53,6 +53,15 @@ pub const Parser = struct {
             try document.accounts.append(allocator, account);
         }
 
+        while (self.matchesWord("transaction")) {
+            var transaction = try self.parseTransaction(allocator);
+
+            document.transactions.append(allocator, transaction) catch |err| {
+                transaction.postings.deinit(allocator);
+                return err;
+            };
+        }
+
         // tmp until acc and tx parsing are added
         _ = try self.expectKind(.eof);
         return document;
@@ -103,6 +112,69 @@ pub const Parser = struct {
             .span = .{
                 .start = keyword.span.start,
                 .end = name.span.end,
+            },
+        };
+    }
+
+    fn parsePosting(self: *Self) !ast.PostingStmt {
+        const direction_token = self.current;
+
+        const direction: ast.Direction =
+            if (self.matchesWord("debit"))
+                .debit
+            else if (self.matchesWord("credit"))
+                .credit
+            else
+                unreachable;
+
+        _ = try self.advance();
+
+        const account = try self.expectKind(.word);
+        const amount = try self.expectKind(.word);
+        const commodity = try self.expectKind(.word);
+
+        return .{
+            .direction = direction,
+            .account = account,
+            .amount = amount,
+            .commodity = commodity,
+            .span = .{
+                .start = direction_token.span.start,
+                .end = commodity.span.end,
+            },
+        };
+    }
+
+    fn parseTransaction(self: *Self, allocator: std.mem.Allocator) !ast.TransactionStmt {
+        const keyword = try self.expectWord("transaction");
+        const date = try self.expectKind(.word);
+        const description = try self.expectKind(.string);
+
+        var external_id: ?lexer.Token = null;
+        if (self.matchesWord("id")) {
+            _ = try self.advance();
+            external_id = try self.expectKind(.word);
+        }
+
+        _ = try self.expectKind(.left_brace);
+
+        var postings: std.ArrayList(ast.PostingStmt) = .empty;
+        errdefer postings.deinit(allocator);
+
+        while (self.matchesWord("debit") or self.matchesWord("credit")) {
+            const posting = try self.parsePosting();
+            try postings.append(allocator, posting);
+        }
+
+        const closing_brace = try self.expectKind(.right_brace);
+        return .{
+            .external_id = external_id,
+            .date = date,
+            .description = description,
+            .postings = postings,
+            .span = .{
+                .start = keyword.span.start,
+                .end = closing_brace.span.end,
             },
         };
     }
@@ -161,4 +233,33 @@ test "parse account declarations" {
 
     const bank = document.accounts.items[0];
     try std.testing.expectEqualStrings("asset:bank", bank.name.lexeme);
+}
+
+test "parse transaction and postings" {
+    var parser = try Parser.init(
+        \\meta version 1
+        \\meta journal "personal"
+        \\
+        \\account asset:bank
+        \\account expense:groceries
+        \\
+        \\transaction 2026-01-17 "Groceries" id groceries-001 {
+        \\  debit expense:groceries 82.40 AUD
+        \\  credit asset:bank 82.40 AUD
+        \\}
+    );
+
+    var document = try parser.parse(std.testing.allocator);
+    defer document.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), document.transactions.items.len);
+
+    const transaction = document.transactions.items[0];
+
+    try std.testing.expectEqualStrings("2026-01-17", transaction.date.lexeme);
+    try std.testing.expectEqualStrings("Groceries", transaction.description.lexeme);
+    try std.testing.expectEqualStrings("groceries-001", transaction.external_id.?.lexeme);
+    try std.testing.expectEqual(@as(usize, 2), transaction.postings.items.len);
+    try std.testing.expectEqual(ast.Direction.debit, transaction.postings.items[0].direction);
+    try std.testing.expectEqualStrings("82.40", transaction.postings.items[0].amount.lexeme);
 }
