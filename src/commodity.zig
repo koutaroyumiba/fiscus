@@ -177,6 +177,37 @@ pub const Catalog = struct {
         };
     }
 
+    pub fn writeAmount(self: *const Self, writer: *std.Io.Writer, amount: Amount) !void {
+        const commodity = self.get(amount.commodity) orelse return error.UnknownCommodity;
+        const magnitude: u64 = @abs(amount.value);
+
+        var factor: u64 = 1;
+        for (0..@as(usize, commodity.scale)) |_| {
+            factor *= 10;
+        }
+
+        const whole = magnitude / factor;
+        const fractional = magnitude % factor;
+
+        if (amount.value < 0) {
+            try writer.writeByte('-');
+        }
+
+        try writer.print("{d}", .{whole});
+
+        if (commodity.scale > 0) {
+            try writer.writeByte('.');
+
+            var divisor = factor / 10;
+            while (divisor > 0) : (divisor /= 10) {
+                const digit: u8 = @intCast((fractional / divisor) % 10);
+                try writer.writeByte('0' + digit);
+            }
+        }
+
+        try writer.print(" {s}", .{commodity.symbol});
+    }
+
     // === PRIVATE HELPERS ===
     fn isValidSymbol(symbol: []const u8) bool {
         if (symbol.len == 0 or symbol.len > 32) {
@@ -317,4 +348,43 @@ test "detect amount overflow" {
         error.Overflow,
         catalog.parseAmount("92233720368547758.08", "AUD"),
     );
+}
+
+test "format exact commodity amounts" {
+    var catalog = try Catalog.init(std.testing.allocator);
+    defer catalog.deinit();
+
+    const aud = catalog.find("AUD").?;
+
+    var output = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer output.deinit();
+
+    try catalog.writeAmount(&output.writer, .{ .value = 1025, .commodity = aud });
+    try std.testing.expectEqualStrings("10.25 AUD", output.written());
+}
+
+test "format negative fractional commodity amount" {
+    var catalog = try Catalog.init(std.testing.allocator);
+    defer catalog.deinit();
+
+    const aud = catalog.find("AUD").?;
+
+    var output = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer output.deinit();
+
+    try catalog.writeAmount(&output.writer, .{ .value = -1, .commodity = aud });
+    try std.testing.expectEqualStrings("-0.01 AUD", output.written());
+}
+
+test "format minimum integer amount" {
+    var catalog = try Catalog.init(std.testing.allocator);
+    defer catalog.deinit();
+
+    const aud = catalog.find("AUD").?;
+
+    var output = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer output.deinit();
+
+    try catalog.writeAmount(&output.writer, .{ .value = std.math.minInt(i64), .commodity = aud });
+    try std.testing.expectEqualStrings("-92233720368547758.08 AUD", output.written());
 }
