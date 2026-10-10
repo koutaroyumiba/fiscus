@@ -1,0 +1,11 @@
+# Exploratory Fiscus DSL example. The syntax is not implemented yet.
+
+journal "multi-currency" {
+    account assets:bank:aud asset
+    account assets:bank:nzd asset
+
+    transaction fx-001 2026-03-21 "Convert AUD to NZD" {
+        credit assets:bank:aud 100.00 AUD
+        debit  assets:bank:nzd 108.25 NZD @ 0.92378753 AUD
+    }
+}

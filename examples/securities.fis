@@ -1,0 +1,27 @@
+# Exploratory Fiscus DSL example. The syntax is not implemented yet.
+
+journal "investments" {
+    commodity AAPL security scale 6 quote USD
+
+    account assets:brokerage:cash asset
+    account assets:brokerage:aapl asset
+    account income:dividends      income
+    account expenses:brokerage    expense
+
+    transaction buy-aapl-001 2026-03-20 "Buy Apple shares" {
+        debit  assets:brokerage:aapl   10 AAPL @ 180.00 USD
+        debit  expenses:brokerage    5.00 USD
+        credit assets:brokerage:cash 1805.00 USD
+    }
+
+    transaction dividend-aapl-001 2026-06-15 "Apple dividend" {
+        debit  assets:brokerage:cash 2.50 USD
+        credit income:dividends     2.50 USD
+    }
+
+    transaction sell-aapl-001 2026-09-10 "Sell Apple shares" {
+        credit assets:brokerage:aapl    2 AAPL @ 195.00 USD
+        debit  assets:brokerage:cash  385.00 USD
+        debit  expenses:brokerage      5.00 USD
+    }
+}

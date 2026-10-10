@@ -1,0 +1,30 @@
+# Exploratory examples of input that Fiscus should reject.
+
+journal "invalid-example" {
+    account assets:bank        asset
+    account expenses:groceries expense
+
+    # Invalid calendar date.
+    transaction bad-date 2026-02-30 "Impossible date" {
+        debit  expenses:groceries 10.00 AUD
+        credit assets:bank        10.00 AUD
+    }
+
+    # AUD supports two fractional decimal digits.
+    transaction bad-precision 2026-03-01 "Too many decimals" {
+        debit  expenses:groceries 10.005 AUD
+        credit assets:bank        10.005 AUD
+    }
+
+    # Debit and credit totals differ.
+    transaction unbalanced 2026-03-02 "Incorrect totals" {
+        debit  expenses:groceries 20.00 AUD
+        credit assets:bank        19.00 AUD
+    }
+
+    # The debit references an undeclared account.
+    transaction unknown-account 2026-03-03 "Missing account" {
+        debit  expenses:transport 5.00 AUD
+        credit assets:bank        5.00 AUD
+    }
+}
