@@ -75,7 +75,7 @@ pub const Money = struct {
     // === GETTERS AND FORMATTERS ===
 
     pub fn get_amount(self: Money) i64 {
-        return self.money;
+        return self.amount;
     }
 
     pub fn get_currency(self: Money) CurrencyCode {
