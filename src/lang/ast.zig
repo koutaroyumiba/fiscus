@@ -2,16 +2,24 @@ const std = @import("std");
 const lexer = @import("lexer.zig");
 const source = @import("source.zig");
 
-const accounting = @import("../accounting.zig");
+pub const AccountType = enum {
+    asset,
+    liability,
+    equity,
+    income,
+    expense,
+};
+
+pub const Direction = enum { debit, credit };
 
 pub const AccountStmt = struct {
     name: lexer.Token,
-    account_type: accounting.AccountType,
+    account_type: AccountType,
     span: source.Span,
 };
 
 pub const PostingStmt = struct {
-    direction: accounting.Direction,
+    direction: Direction,
     account: lexer.Token,
     amount: lexer.Token,
     commodity: lexer.Token,
