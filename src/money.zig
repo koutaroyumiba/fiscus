@@ -56,8 +56,20 @@ pub const Money = struct {
 
     // === COMPARISON OPERATIONS ===
 
-    pub fn equal(self: Money, other: Money) bool {
+    pub fn eql(self: Money, other: Money) bool {
         return (self.currency == other.currency) and (self.amount == other.amount);
+    }
+
+    /// Ordering function
+    ///
+    /// Usage:
+    /// const less_than = (try a.order(b)).compare(.lt)
+    pub fn order(self: Money, other: Money) MoneyError!std.math.Order {
+        if (self.currency != other.currency) {
+            return error.CurrencyMismatch;
+        }
+
+        return std.math.order(self.amount, other.amount);
     }
 
     // === GETTERS AND FORMATTERS ===
