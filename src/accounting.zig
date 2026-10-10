@@ -251,7 +251,7 @@ pub const Journal = struct {
 
     pub fn validateTransaction(self: *const Self, transaction_index: TransactionIndex) !void {
         const index = std.math.cast(usize, transaction_index) orelse return error.UnknownTransaction;
-        if (index > self.transactions.items.len) {
+        if (index >= self.transactions.items.len) {
             return error.UnknownTransaction;
         }
 
