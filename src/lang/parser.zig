@@ -48,6 +48,11 @@ pub const Parser = struct {
         var document = ast.Document.init(version, journal_name);
         errdefer document.deinit(allocator);
 
+        while (self.matchesWord("account")) {
+            const account = try self.parseAccount();
+            try document.accounts.append(allocator, account);
+        }
+
         // tmp until acc and tx parsing are added
         _ = try self.expectKind(.eof);
         return document;
@@ -88,6 +93,19 @@ pub const Parser = struct {
     fn matchesWord(self: *const Self, expected: []const u8) bool {
         return self.current.kind == .word and std.mem.eql(u8, self.current.lexeme, expected);
     }
+
+    fn parseAccount(self: *Self) !ast.AccountStmt {
+        const keyword = try self.expectWord("account");
+        const name = try self.expectKind(.word);
+
+        return .{
+            .name = name,
+            .span = .{
+                .start = keyword.span.start,
+                .end = name.span.end,
+            },
+        };
+    }
 };
 
 test "parse required metadata" {
@@ -123,4 +141,24 @@ test "require version metadata first" {
         },
         else => return error.TestUnexpectedResult,
     }
+}
+
+test "parse account declarations" {
+    var parser = try Parser.init(
+        \\meta version 1
+        \\meta journal "personal"
+        \\
+        \\account asset:bank
+        \\account equity:opening-balances
+        \\account income:salary
+        \\account expense:groceries
+    );
+
+    var document = try parser.parse(std.testing.allocator);
+    defer document.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(usize, 4), document.accounts.items.len);
+
+    const bank = document.accounts.items[0];
+    try std.testing.expectEqualStrings("asset:bank", bank.name.lexeme);
 }

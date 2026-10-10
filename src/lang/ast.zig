@@ -14,7 +14,6 @@ pub const Direction = enum { debit, credit };
 
 pub const AccountStmt = struct {
     name: lexer.Token,
-    account_type: AccountType,
     span: source.Span,
 };
 
