@@ -1,0 +1,56 @@
+const std = @import("std");
+const lexer = @import("lexer.zig");
+const source = @import("source.zig");
+
+const accounting = @import("../accounting.zig");
+
+pub const AccountStmt = struct {
+    name: lexer.Token,
+    account_type: accounting.AccountType,
+    span: source.Span,
+};
+
+pub const PostingStmt = struct {
+    direction: accounting.Direction,
+    account: lexer.Token,
+    amount: lexer.Token,
+    commodity: lexer.Token,
+    span: source.Span,
+};
+
+pub const TransactionStmt = struct {
+    external_id: ?lexer.Token,
+    date: lexer.Token,
+    description: lexer.Token,
+    postings: std.ArrayList(PostingStmt),
+    span: source.Span,
+};
+
+pub const Document = struct {
+    version: lexer.Token,
+    journal_name: lexer.Token,
+
+    accounts: std.ArrayList(AccountStmt),
+    transactions: std.ArrayList(TransactionStmt),
+
+    const Self = @This();
+
+    pub fn init(version: lexer.Token, journal_name: lexer.Token) Document {
+        return .{
+            .version = version,
+            .journal_name = journal_name,
+            .accounts = .empty,
+            .transactions = .empty,
+        };
+    }
+
+    pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
+        for (self.transactions.items) |*transaction| {
+            transaction.postings.deinit(allocator);
+        }
+
+        self.transactions.deinit(allocator);
+        self.accounts.deinit(allocator);
+        self.* = undefined;
+    }
+};
