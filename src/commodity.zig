@@ -102,7 +102,7 @@ pub const Catalog = struct {
     }
 
     pub fn add(self: *Self, symbol: []const u8, kind: Kind, scale: u8, quote: ?CommodityId) !CommodityId {
-        if (!is_valid_symbol(symbol)) {
+        if (!isValidSymbol(symbol)) {
             return error.InvalidSymbol;
         }
 
@@ -144,11 +144,11 @@ pub const Catalog = struct {
         return id;
     }
 
-    pub fn find(self: *const Catalog, symbol: []const u8) ?CommodityId {
+    pub fn find(self: *const Self, symbol: []const u8) ?CommodityId {
         return self.ids_by_symbol.get(symbol);
     }
 
-    pub fn get(self: *const Catalog, id: CommodityId) ?Commodity {
+    pub fn get(self: *const Self, id: CommodityId) ?Commodity {
         const index = std.math.cast(usize, id) orelse return null;
 
         if (index >= self.commodities.items.len) {
@@ -158,18 +158,37 @@ pub const Catalog = struct {
         return self.commodities.items[index];
     }
 
+    pub const ParseAmountError = error{
+        UnknownCommodity,
+        InvalidAmount,
+        TooMuchPrecision,
+        Overflow,
+    };
+
+    pub fn parseAmount(self: *const Self, number: []const u8, symbol: []const u8) !Amount {
+        const commodity_id = self.find(symbol) orelse return error.UnknownCommodity;
+
+        const commodity = self.get(commodity_id).?;
+        const value = try parseDecimal(number, commodity.scale);
+
+        return .{
+            .value = value,
+            .commodity = commodity_id,
+        };
+    }
+
     // === PRIVATE HELPERS ===
-    fn is_valid_symbol(symbol: []const u8) bool {
+    fn isValidSymbol(symbol: []const u8) bool {
         if (symbol.len == 0 or symbol.len > 32) {
             return false;
         }
 
-        if (!is_uppercase_letter(symbol[0])) {
+        if (!isUpper(symbol[0])) {
             return false;
         }
 
         for (symbol[1..]) |c| {
-            const valid = is_uppercase_letter(c) or (c >= '0' and c <= '9') or c == '.' or c == '_' or c == '-';
+            const valid = isUpper(c) or (c >= '0' and c <= '9') or c == '.' or c == '_' or c == '-';
 
             if (!valid) {
                 return false;
@@ -179,7 +198,123 @@ pub const Catalog = struct {
         return true;
     }
 
-    fn is_uppercase_letter(char: u8) bool {
+    fn isUpper(char: u8) bool {
         return char >= 'A' and char <= 'Z';
     }
+
+    fn parseDecimal(text: []const u8, scale: u8) !i64 {
+        if (text.len == 0) {
+            return error.InvalidAmount;
+        }
+
+        var value: i64 = 0;
+        var seen_decimal = false;
+        var fractional_digits: u8 = 0;
+        var digits: usize = 0;
+
+        for (text) |char| {
+            if (char == '.') {
+                if (seen_decimal or digits == 0) {
+                    return error.InvalidAmount;
+                }
+
+                seen_decimal = true;
+                continue;
+            }
+
+            if (char < '0' or char > '9') {
+                return error.InvalidAmount;
+            }
+
+            if (seen_decimal) {
+                if (fractional_digits == scale) {
+                    return error.TooMuchPrecision;
+                }
+
+                fractional_digits += 1;
+            }
+
+            value = try std.math.mul(i64, value, 10);
+            value = try std.math.add(i64, value, @as(i64, char - '0'));
+            digits += 1;
+        }
+
+        if (seen_decimal and fractional_digits == 0) {
+            return error.InvalidAmount;
+        }
+
+        while (fractional_digits < scale) : (fractional_digits += 1) {
+            value = try std.math.mul(i64, value, 10);
+        }
+
+        return value;
+    }
 };
+
+test "parse exact commodity amounts" {
+    var catalog = try Catalog.init(std.testing.allocator);
+    defer catalog.deinit();
+
+    const aud = catalog.find("AUD").?;
+
+    try std.testing.expectEqual(
+        Amount{ .value = 1000, .commodity = aud },
+        try catalog.parseAmount("10", "AUD"),
+    );
+    try std.testing.expectEqual(
+        Amount{ .value = 1020, .commodity = aud },
+        try catalog.parseAmount("10.2", "AUD"),
+    );
+    try std.testing.expectEqual(
+        Amount{ .value = 1025, .commodity = aud },
+        try catalog.parseAmount("10.25", "AUD"),
+    );
+    try std.testing.expectEqual(
+        Amount{ .value = 1, .commodity = aud },
+        try catalog.parseAmount("0.01", "AUD"),
+    );
+}
+
+test "reject invalid commodity amounts" {
+    var catalog = try Catalog.init(std.testing.allocator);
+    defer catalog.deinit();
+
+    try std.testing.expectError(
+        error.InvalidAmount,
+        catalog.parseAmount("", "AUD"),
+    );
+    try std.testing.expectError(
+        error.InvalidAmount,
+        catalog.parseAmount(".50", "AUD"),
+    );
+    try std.testing.expectError(
+        error.InvalidAmount,
+        catalog.parseAmount("10.", "AUD"),
+    );
+    try std.testing.expectError(
+        error.TooMuchPrecision,
+        catalog.parseAmount("10.005", "AUD"),
+    );
+    try std.testing.expectError(
+        error.InvalidAmount,
+        catalog.parseAmount("-10.00", "AUD"),
+    );
+    try std.testing.expectError(
+        error.InvalidAmount,
+        catalog.parseAmount("1e3", "AUD"),
+    );
+    try std.testing.expectError(
+        error.UnknownCommodity,
+        catalog.parseAmount("10.00", "BTC"),
+    );
+}
+
+test "detect amount overflow" {
+    var catalog = try Catalog.init(std.testing.allocator);
+    defer catalog.deinit();
+
+    try std.testing.expectError(
+        error.Overflow,
+        catalog.parseAmount("92233720368547758.08", "AUD"),
+    );
+}
