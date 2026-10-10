@@ -46,6 +46,15 @@ pub const JournalError = error{
     TooManyTransactions,
 };
 
+pub const ValidationError = error{
+    UnsupportedVersion,
+    EmptyJournalName,
+    TooFewPostings,
+    MultipleCommodities,
+    TransactionTotalOverflow,
+    UnbalancedTransaction,
+};
+
 pub const Journal = struct {
     allocator: std.mem.Allocator,
 
@@ -226,6 +235,64 @@ pub const Journal = struct {
         );
     }
 
+    pub fn validate(self: *const Self) !void {
+        if (self.version != 1) {
+            return error.UnsupportedVersion;
+        }
+
+        if (self.name.len == 0) {
+            return error.EmptyJournalName;
+        }
+
+        for (0..self.transactions.items.len) |index| {
+            try self.validateTransaction(@intCast(index));
+        }
+    }
+
+    pub fn validateTransaction(self: *const Self, transaction_index: TransactionIndex) !void {
+        const index = std.math.cast(usize, transaction_index) orelse return error.UnknownTransaction;
+        if (index > self.transactions.items.len) {
+            return error.UnknownTransaction;
+        }
+
+        const transaction = self.transactions.items[index];
+        if (transaction.postings.items.len < 2) {
+            return error.TooFewPostings;
+        }
+
+        const expected_commodity = transaction.postings.items[0].amount.commodity;
+
+        var debit_total: i64 = 0;
+        var credit_total: i64 = 0;
+
+        for (transaction.postings.items) |posting| {
+            if (posting.amount.commodity != expected_commodity) {
+                return error.MultipleCommodities;
+            }
+
+            switch (posting.direction) {
+                .debit => {
+                    debit_total = std.math.add(
+                        i64,
+                        debit_total,
+                        posting.amount.value,
+                    ) catch return error.TransactionTotalOverflow;
+                },
+                .credit => {
+                    credit_total = std.math.add(
+                        i64,
+                        credit_total,
+                        posting.amount.value,
+                    ) catch return error.TransactionTotalOverflow;
+                },
+            }
+        }
+
+        if (debit_total != credit_total) {
+            return error.UnbalancedTransaction;
+        }
+    }
+
     // === PRIVATE HELPER FUNCTIONS ===
 
     fn isValidAccountName(name: []const u8) bool {
@@ -287,4 +354,24 @@ test "construct basic journal" {
     try std.testing.expectError(error.InvalidAccountName, journal.addAccount("assets:bank"));
     try std.testing.expectEqual(@as(usize, 1), journal.transactions.items.len);
     try std.testing.expectEqual(@as(usize, 1), journal.transactions.items[0].postings.items.len);
+
+    const opening = try journal.addAccount("equity:opening-balances");
+
+    try journal.addPosting(transaction, .credit, opening, amount);
+    try journal.validate();
+}
+
+test "reject unbalanced transaction" {
+    var journal = try Journal.init(std.testing.allocator, 1, "personal");
+    defer journal.deinit();
+
+    const bank = try journal.addAccount("asset:bank");
+    const groceries = try journal.addAccount("expense:groceries");
+
+    const transaction = try journal.addTransaction(null, try time.Date.init(2026, .jan, 17), "Groceries");
+
+    try journal.addPosting(transaction, .debit, groceries, try journal.catalog.parseAmount("20.00", "AUD"));
+    try journal.addPosting(transaction, .credit, bank, try journal.catalog.parseAmount("19.00", "AUD"));
+
+    try std.testing.expectError(error.UnbalancedTransaction, journal.validate());
 }
