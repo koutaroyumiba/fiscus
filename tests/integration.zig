@@ -21,20 +21,19 @@ test "parse and decode complete journal" {
         \\}
     ;
 
-    var parser = fiscus.lang.parser.Parser.init(input);
-    var document = try parser.parse(std.testing.allocator);
-    defer document.deinit(std.testing.allocator);
+    var result = try fiscus.loader.load(std.testing.allocator, input);
+    defer result.deinit();
 
-    var decoder = fiscus.decoder.Decoder.init(std.testing.allocator);
+    switch (result) {
+        .journal => |journal| {
+            try std.testing.expectEqualStrings("personal", journal.name);
+            try std.testing.expectEqual(@as(usize, 3), journal.accounts.items.len);
+            try std.testing.expectEqual(@as(usize, 2), journal.transactions.items.len);
 
-    var journal = try decoder.decode(&document);
-    defer journal.deinit();
-
-    try std.testing.expectEqualStrings("personal", journal.name);
-    try std.testing.expectEqual(@as(usize, 3), journal.accounts.items.len);
-    try std.testing.expectEqual(@as(usize, 2), journal.transactions.items.len);
-
-    try journal.validate();
+            try journal.validate();
+        },
+        .failure => return error.UnexpectedFailure,
+    }
 }
 
 test "report unknown posting account" {
@@ -50,13 +49,17 @@ test "report unknown posting account" {
         \\}
     ;
 
-    var parser = fiscus.lang.parser.Parser.init(input);
-    var document = try parser.parse(std.testing.allocator);
-    defer document.deinit(std.testing.allocator);
+    var result = try fiscus.loader.load(std.testing.allocator, input);
+    defer result.deinit();
 
-    var decoder = fiscus.decoder.Decoder.init(std.testing.allocator);
-
-    try std.testing.expectError(error.InvalidDocument, decoder.decode(&document));
-    try std.testing.expectEqual(fiscus.decoder.FailureKind.unknown_account, decoder.failure.?.kind);
-    try std.testing.expectEqual(@as(usize, 7), decoder.failure.?.span.start.line);
+    switch (result) {
+        .failure => |failure| switch (failure) {
+            .decoder => |decoder_failure| {
+                try std.testing.expectEqual(fiscus.decoder.FailureKind.unknown_account, decoder_failure.kind);
+                try std.testing.expectEqual(@as(usize, 7), decoder_failure.span.start.line);
+            },
+            else => return error.UnexpectedFailureKind,
+        },
+        .journal => return error.ExpectedFailure,
+    }
 }

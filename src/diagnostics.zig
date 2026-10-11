@@ -2,6 +2,7 @@ const std = @import("std");
 
 const decoder = @import("decoder.zig");
 const lexer = @import("lang/lexer.zig");
+const loader = @import("loader.zig");
 const parser = @import("lang/parser.zig");
 const source = @import("lang/source.zig");
 
@@ -103,6 +104,14 @@ pub fn fromParserFailure(failure: parser.Failure) Diagnostic {
             .word => |word| expectedWordMessage(word),
         },
         .span = failure.token.span,
+    };
+}
+
+pub fn fromLoadFailure(failure: loader.Failure) Diagnostic {
+    return switch (failure) {
+        .lexer => |value| fromLexerFailure(value),
+        .parser => |value| fromParserFailure(value),
+        .decoder => |value| fromDecoderFailure(value),
     };
 }
 
