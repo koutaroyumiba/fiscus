@@ -67,7 +67,6 @@ pub const Parser = struct {
             };
         }
 
-        // tmp until acc and tx parsing are added
         _ = try self.expectKind(.eof);
         return document;
     }

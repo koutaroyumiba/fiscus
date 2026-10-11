@@ -2,6 +2,7 @@ const std = @import("std");
 
 const decoder = @import("decoder.zig");
 const lexer = @import("lang/lexer.zig");
+const parser = @import("lang/parser.zig");
 const source = @import("lang/source.zig");
 
 pub const Diagnostic = struct {
@@ -89,6 +90,32 @@ pub fn fromLexerFailure(failure: lexer.Failure) Diagnostic {
     };
 }
 
+pub fn fromParserFailure(failure: parser.Failure) Diagnostic {
+    return .{
+        .message = switch (failure.expected) {
+            .kind => |kind| switch (kind) {
+                .word => "expected a word",
+                .string => "expected a quoted string",
+                .left_brace => "expected '{'",
+                .right_brace => "expected '}'",
+                .eof => "expected end of file",
+            },
+            .word => |word| expectedWordMessage(word),
+        },
+        .span = failure.token.span,
+    };
+}
+
+fn expectedWordMessage(word: []const u8) []const u8 {
+    if (std.mem.eql(u8, word, "meta")) return "expected 'meta'";
+    if (std.mem.eql(u8, word, "version")) return "expected 'version'";
+    if (std.mem.eql(u8, word, "journal")) return "expected 'journal'";
+    if (std.mem.eql(u8, word, "account")) return "expected 'account'";
+    if (std.mem.eql(u8, word, "transaction")) return "expected 'transaction'";
+
+    return "expected a keyword";
+}
+
 test "render source diagnostic" {
     const input =
         \\account asset:bank
@@ -122,4 +149,17 @@ test "render source diagnostic" {
         \\          ^^^^^^^
         \\
     , output.written());
+}
+
+test "map parser failure" {
+    var parser_instance = parser.Parser.init(
+        \\meta journal "personal"
+    );
+
+    try std.testing.expectError(error.UnexpectedToken, parser_instance.parse(std.testing.allocator));
+
+    const diagnostic = fromParserFailure(parser_instance.failure.?);
+
+    try std.testing.expectEqualStrings("expected 'version'", diagnostic.message);
+    try std.testing.expectEqual(@as(usize, 1), diagnostic.span.start.line);
 }
