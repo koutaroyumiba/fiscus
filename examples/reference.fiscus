@@ -1,4 +1,4 @@
-# Exploratory Fiscus DSL example. The syntax is not implemented yet.
+# Minimal reference journal using the implemented Fiscus version 1 syntax.
 
 meta version 1
 meta journal "personal"

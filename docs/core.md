@@ -1,23 +1,30 @@
-# Core Documentation
+# Fiscus Core Model
 
-> Will make all of this nicer, this is just acting as a dump for now...
+Fiscus uses double-entry accounting with exact, commodity-aware amounts.
 
-Currencies and securities are both commodities.
+## Commodities and amounts
 
-We treat ISO 4217 currencies as protected, built-in commodities. A journal may use an ISO currency without declaring it:
+An amount is a scaled integer paired with an internal commodity ID. Floating-point arithmetic is not used.
+
+The current built-in commodities are AUD, NZD, and USD, each with scale 2. A journal may contain multiple currencies, and an account may hold a separate balance in each currency. Every individual transaction must currently balance in one currency.
+
+Custom commodities, securities, price annotations, and currency conversion are planned but are not implemented.
+
+## Accounts
+
+An account's type is inferred from the first component of its name:
 
 ```fiscus
-commodity AAPL security scale 6 quote USD
-commodity BTC custom scale 8 quote USD
+account asset:bank:commbank:au:everyday
+account liability:credit-card:amex:au:platinum
+account equity:opening-balances
+account income:employment:acme:salary
+account expense:food:groceries
 ```
 
-## Account structure
+Typical structures are:
 
-An account's type is inferred from the first component of its name. Accounts can
-hold any commodity; a currency in an account name identifies a real-world
-subaccount but does not constrain its postings.
-
-```fiscus
+```text
 asset:<category>[:<institution>[:<jurisdiction>[:<account>[:<subaccount>]]]]
 liability:<category>[:<institution>[:<jurisdiction>[:<account>[:<subaccount>]]]]
 income:<category>:<source>[:<detail>]
@@ -25,55 +32,31 @@ expense:<category>[:<subcategory>]
 equity:<category>
 ```
 
-Examples:
+### Naming conventions
 
-```fiscus
-account asset:bank:commbank:au:everyday
-account asset:bank:mufg:jp:ordinary
-
-account asset:bank:wise:global:balance:aud
-account asset:bank:wise:global:balance:eur
-account asset:bank:wise:global:balance:jpy
-
-# crypto
-account asset:crypto:wallet:ledger:bitcoin
-account asset:crypto:wallet:ledger:ethereum
-account asset:crypto:exchange:kraken
-
-account asset:cash:wallet:aud
-
-account liability:credit-card:amex:au:platinum
-account liability:credit-card:wise:global:card:aud
-account liability:loan:commbank:au:home-loan
-account liability:payable:friend
-
-account income:employment:acme:salary
-account income:employment:acme:bonus
-account income:interest:wise
-account income:dividends
-account income:capital-gains:crypto
-
-account expense:food:groceries
-account expense:food:dining
-account expense:housing:rent
-account expense:housing:utilities
-account expense:transport:public
-account expense:financial:bank-fees
-account expense:financial:trading-fees
-
-account equity:opening-balances
-account equity:contributions
-account equity:withdrawals
-```
-
-## Conventions
-
-1. Top-level names match the `AccountType` enum and determine the account type.
-2. Account components are lowercase.
-3. Country and currency identifiers use lowercase ISO codes.
+1. The top-level component is one of `asset`, `liability`, `equity`, `income`, or `expense`.
+2. Components use lowercase letters, digits, hyphens, and underscores.
+3. Country and currency identifiers in account names use lowercase ISO-style codes.
 4. Names describe stable identities rather than mutable properties.
-5. Duplicate accounts use a short, non-sensitive suffix.
-6. Closed account names are not reused.
-7. Avoid relative labels such as `main` where possible.
-8. Accounts accept any commodity by default.
-9. Include currency in a name only when it distinguishes a real subaccount.
+5. Include a currency component only when it distinguishes a real-world subaccount.
+6. Account names do not constrain which commodities the account may hold.
+
+## Transactions and postings
+
+A transaction records a dated event with two or more postings. Posting amounts are positive; `debit` and `credit` represent accounting direction.
+
+For the current MVP, all postings in a transaction must use the same commodity and total debits must exactly equal total credits.
+
+## Natural balances
+
+Balance reports use each account type's natural sign:
+
+| Account type | Increase |
+|---|---|
+| Asset | Debit |
+| Expense | Debit |
+| Liability | Credit |
+| Equity | Credit |
+| Income | Credit |
+
+This makes ordinary balances display positively while preserving negative balances when an account moves against its normal direction.

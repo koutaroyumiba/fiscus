@@ -2,48 +2,104 @@
 
 # fiscus
 
-[![Status: Experimental](https://img.shields.io/badge/status-experimental-orange?style=flat-square)](#)
+[![Status: Experimental](https://img.shields.io/badge/status-experimental-orange?style=flat-square)](#status)
 [![Zig](https://img.shields.io/badge/Zig-0.17.0-F7A41D?style=flat-square&logo=zig&logoColor=white)](https://ziglang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f?style=flat-square)](LICENSE)
 
-**Personal Financial Toolkit, powered by Zig.**
+**A Complete Personal Financial Toolkit, powered by Zig**
 
 </div>
 
-Repository `fiscus`, CLI: `fis`
+The repository is named `fiscus`; its command-line program is `fis`.
 
-Required Zig version: `0.17.0`
+## Status
 
-## Motivation
+Fiscus is experimental. Currently, it can parse and validate journals, enforce double-entry accounting, and report natural account balances. The file format may still undergo breaking changes.
 
-- https://beancount.github.io/docs/
-- https://github.com/tigerbeetle/tigerbeetle
+Required Zig version: **0.17.0**.
 
-## Potential Structure (not decided yet...)
+## Current Implementations
 
+```sh
+# validate a journal (a .fiscus file)
+fis check examples/personal.fiscus
+
+# print account balances
+fis balance examples/personal.fiscus
 ```
+
+## Journal format (proposed - still experimental)
+
+```fiscus
+meta version 1
+meta journal "personal"
+
+account asset:bank
+account equity:opening-balances
+account income:salary
+account expense:food:groceries
+
+transaction 2026-01-01 "Opening balance" {
+    debit  asset:bank               1000.00 AUD
+    credit equity:opening-balances 1000.00 AUD
+}
+
+transaction 2026-01-15 "Salary" id salary-2026-01 {
+    debit  asset:bank    3000.00 AUD
+    credit income:salary 3000.00 AUD
+}
+```
+
+Account type is inferred from the first component of its name. Supported roots are:
+
+- `asset`
+- `liability`
+- `equity`
+- `income`
+- `expense`
+
+Transaction IDs are optional. When supplied, they follow the description as `id <value>` and must be unique.
+
+See [`docs/language.md`](docs/language.md) for the implemented grammar and validation rules, and [`docs/glossary.md`](docs/glossary.md) for accounting terminology.
+
+## Current limitations
+
+- Every transaction must balance in one commodity.
+- Currency conversion and exchange-rate annotations are not supported.
+- Securities and custom commodity declarations are not supported.
+- Only AUD, NZD, and USD are built in; a complete ISO 4217 catalog is planned.
+- Strings do not support escapes or newlines.
+- Includes, account lifecycle dates, transaction metadata, and file editing are not supported.
+- The only report currently implemented is account balances.
+
+## Project structure
+
+```text
 src/
-    main.zig            # process startup: invoke cli
-    root.zig            # public accounting module exports
+    main.zig            CLI process entry point
+    cli.zig             command handling and file I/O
+    root.zig            public module exports
 
-    money.zig           # exact amounts, parsing, formatting, arithmetic
-    time.zig            # time utils
-    accounting.zig      # accounts, postings, transactions, rules
-    journal.zig         # in-memory journal validation and queries
+    commodity.zig       commodities and exact amounts
+    time.zig            date validation and parsing
+    accounting.zig      journal domain model and validation
+    reports.zig         derived account balances
 
-    diagnostics.zig     # diagnostics
-    reports.zig         # derived balances and financial reports
-    storage.zig         # locking, backups, atomic file replacement
-    cli.zig             # command parsing and output formatting
+    loader.zig          source-to-journal pipeline
+    decoder.zig         AST-to-journal conversion
+    diagnostics.zig     source diagnostic rendering
 
-    dsl/
-        root.zig
+    lang/               .fiscus DSL things :D
         source.zig
         lexer.zig
         ast.zig
         parser.zig
-        lower.zig
 ```
+
+## Motivation
+
+- [Beancount](https://beancount.github.io/docs/)
+- [TigerBeetle](https://github.com/tigerbeetle/tigerbeetle)
 
 ## License
 

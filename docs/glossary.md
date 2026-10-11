@@ -1,111 +1,67 @@
 # Fiscus Accounting Glossary
 
-> this is AI generated... will remake later but I lwk don't know the terms too...
+Fiscus is based on double-entry accounting. Every financial event is represented by a transaction containing two or more postings.
 
-Fiscus is based on **double-entry accounting**. Every financial event is recorded as a transaction containing two or more postings.
+## Journal
 
-## Core Structure
+A journal is the complete collection of account declarations and transactions in a `.fiscus` file.
 
-### Journal
-
-A **journal** is the complete chronological collection of accounts and transactions.
-
-```fis
-journal "personal" {
-    ...
-}
+```fiscus
+meta version 1
+meta journal "personal"
 ```
 
-It is roughly equivalent to an accounting book or ledger file.
+## Account
 
-### Account
+An account is a named bucket used to classify value:
 
-An **account** is a named bucket used to classify value.
-
-```fis
+```fiscus
 account asset:bank
 account expense:food:groceries
 ```
 
-Account names are hierarchical, and their first component determines their type:
+Names are hierarchical. The first component determines the account type:
 
 - `asset`
-- `asset:bank`
-- `asset:brokerage:cash`
+- `liability`
+- `equity`
+- `income`
+- `expense`
 
-The colon-separated components allow related accounts to be grouped and summarized.
+The complete set of accounts is often called the chart of accounts.
 
-A complete list of accounts is often called the **chart of accounts**.
+## Transaction
 
-### Transaction
+A transaction records one dated financial event:
 
-A **transaction** records one financial event.
-
-```fis
-transaction groceries-001 2026-01-17 "Groceries" {
+```fiscus
+transaction 2026-01-17 "Groceries" {
     debit  expense:food:groceries 82.40 AUD
     credit asset:bank             82.40 AUD
 }
 ```
 
-It contains:
+A transaction may have an explicit unique ID:
 
-- a unique identifier: `groceries-001`
-- a date: `2026-01-17`
-- a description: `"Groceries"`
-- two or more postings
+```fiscus
+transaction 2026-01-17 "Groceries" id groceries-001 {
+```
 
-The whole transaction must balance.
+Transactions without an explicit ID are valid.
 
-### Posting
+## Posting
 
-A **posting** is one line inside a transaction. It records a change to one account.
+A posting is one account's side of a transaction:
 
-```fis
+```fiscus
 debit expense:food:groceries 82.40 AUD
 ```
 
-This posting has:
+It has a direction, account, amount, and commodity. Posting amounts are positive; direction is expressed with `debit` or `credit`.
 
-- a direction: debit
-- an account: `expense:food:groceries`
-- an amount: `82.40`
-- a commodity: `AUD`
+## Debit and credit
 
-A useful distinction is:
-
-- **Transaction:** the entire event
-- **Posting:** one account's side of that event
-
-For example, buying groceries is one transaction with two postings:
-
-1. Grocery expense increases.
-2. Bank balance decreases.
-
-## Double-Entry Accounting
-
-Every transaction affects at least two accounts, and total debits must equal total credits.
-
-```fis
-debit  expense:food:groceries 82.40 AUD
-credit asset:bank             82.40 AUD
-```
-
-This does **not** mean money was duplicated. It records both sides of the same event:
-
-- what was received or incurred
-- where its value came from
-
-An **unbalanced transaction** is invalid:
-
-```fis
-debit  expense:food:groceries 20.00 AUD
-credit asset:bank             19.00 AUD
-```
-
-## Debit and Credit
-
-**Debit** and **credit** are accounting directions, not synonyms for "bad" and "good," or simply "money in" and "money out."
+Debit and credit are accounting directions, not synonyms for money entering or leaving.
 
 | Account type | Increases with | Decreases with |
 |---|---|---|
@@ -115,124 +71,54 @@ credit asset:bank             19.00 AUD
 | Equity | Credit | Debit |
 | Income | Credit | Debit |
 
-For example:
+The side that normally increases an account is its normal balance.
 
-```fis
-debit  asset:bank    3000.00 AUD
-credit income:salary 3000.00 AUD
-```
-
-- The bank asset increases with a debit.
-- Salary income increases with a credit.
-
-The side that normally increases an account is called its **normal balance**.
-
-## The Five Account Types
+## Account types
 
 ### Asset
 
-Something you own or control that has value.
-
-Examples:
-
-- bank account
-- cash
-- shares
-- money owed to you
-- property
-
-```fis
-account asset:bank
-```
-
-Assets increase with debits and decrease with credits.
+Something owned or controlled that has value, such as cash or a bank account. Assets increase with debits.
 
 ### Liability
 
-Something you owe.
-
-Examples:
-
-- credit card debt
-- mortgage
-- unpaid bills
-- loans
-
-```fis
-account liability:credit-card
-```
-
-Liabilities increase with credits and decrease with debits.
-
-A credit-card purchase might be:
-
-```fis
-debit  expense:food:groceries 82.40 AUD
-credit liability:credit-card  82.40 AUD
-```
+An obligation, such as credit-card debt or a loan. Liabilities increase with credits.
 
 ### Equity
 
-The residual value after subtracting liabilities from assets.
+Residual value after liabilities are deducted from assets. Opening balances commonly use equity to explain value that existed before the journal began.
 
-```text
-assets - liabilities = equity
-```
-
-Examples include:
-
-- owner contributions
-- retained value
-- opening balances
-
-```fis
-account equity:opening-balances
-```
-
-An opening balance uses equity to explain where an existing asset balance came from:
-
-```fis
+```fiscus
 debit  asset:bank               1000.00 AUD
 credit equity:opening-balances 1000.00 AUD
 ```
 
 ### Income
 
-Value earned or received.
-
-Examples:
-
-- salary
-- interest
-- dividends
-- sales revenue
-
-```fis
-account income:salary
-```
-
-Income increases with credits.
+Value earned or received, such as salary or interest. Income increases with credits.
 
 ### Expense
 
-Value consumed or spent.
+Value consumed or spent, such as rent or groceries. Expenses increase with debits.
 
-Examples:
+## Double-entry accounting
 
-- groceries
-- rent
-- brokerage fees
-- transport
+Every transaction has at least two postings, and total debits must equal total credits.
 
-```fis
-account expense:food:groceries
+```fiscus
+debit  expense:food:groceries 82.40 AUD
+credit asset:bank             82.40 AUD
 ```
 
-Expenses increase with debits.
+An unbalanced transaction is invalid:
 
-## Accounting Equation
+```fiscus
+debit  expense:food:groceries 20.00 AUD
+credit asset:bank             19.00 AUD
+```
 
-The fundamental accounting equation is:
+## Accounting equation
+
+The fundamental equation is:
 
 ```text
 assets - liabilities = equity
@@ -244,177 +130,53 @@ Including activity over a period:
 assets - liabilities = equity + income - expenses
 ```
 
-Double-entry accounting keeps this equation consistent.
+## Commodity
+
+A commodity is the unit being measured. The current implementation provides AUD, NZD, and USD as built-in currency commodities.
+
+An amount always includes a commodity:
+
+```text
+100.00 AUD
+50.00 USD
+```
+
+Different commodities are tracked as separate balances and cannot be added directly.
+
+## Scale and atomic units
+
+Scale is the supported fractional precision of a commodity. AUD has scale 2, so `10.25 AUD` is represented exactly as 1,025 atomic units. `10.005 AUD` is invalid.
+
+Fiscus stores amounts as integers rather than floating-point values, avoiding binary floating-point rounding errors.
 
 ## Balance
 
-An account's **balance** is the net result of all postings made to it.
+An account balance is the net result of its postings. Fiscus reports balances using each account type's normal sign.
 
-Given:
+For an asset account:
 
-```fis
+```fiscus
 debit  asset:bank 1000.00 AUD
 debit  asset:bank 3000.00 AUD
 credit asset:bank   82.40 AUD
 ```
 
-The bank balance is:
+The balance is `3917.60 AUD`.
 
-```text
-1000.00 + 3000.00 - 82.40 = 3917.60 AUD
-```
+An account can have independent balances in more than one commodity.
 
-A **trial balance** summarizes all account balances and checks that total debits equal total credits.
+## Opening balance
 
-## Commodity
-
-A **commodity** is the thing being measured or transferred.
-
-Currencies are commodities:
-
-- `AUD`
-- `NZD`
-- `USD`
-
-Securities can also be commodities:
-
-- `AAPL`
-- shares in a fund
-- cryptocurrency
-
-Thus an amount is not merely `100`; it is something like:
-
-```text
-100.00 AUD
-10 AAPL
-```
-
-Amounts in different commodities cannot be directly added without a conversion price.
-
-## Currency and Minor Units
-
-A **currency code** identifies a currency, generally using ISO 4217 codes such as `AUD` and `NZD`.
-
-Currencies also have a defined number of fractional digits. AUD uses two, so:
-
-```text
-10.00 AUD   valid
-10.005 AUD  invalid
-```
-
-Internally, Fiscus's current `Money` type stores an integer amount and currency. Integer storage avoids floating-point rounding problems. For example, an eventual representation would typically treat `10.25 AUD` as 1,025 cents.
-
-## Security
-
-A **security** is a tradable financial instrument such as a share.
-
-```fis
-commodity AAPL security scale 6 quote USD
-```
-
-Here:
-
-- `AAPL` is the commodity symbol.
-- `security` classifies it as an investment instrument.
-- `scale 6` allows quantities with up to six fractional digits.
-- `quote USD` says its prices are normally expressed in USD.
-
-## Scale
-
-**Scale** is the maximum supported fractional precision of a commodity.
-
-For example, scale 6 allows:
-
-```text
-1.123456 AAPL
-```
-
-This is useful for fractional shares or other precisely measured commodities.
-
-## Quote Currency
-
-The **quote currency** is the currency in which a commodity's price is expressed.
-
-If AAPL is quoted in USD:
-
-```text
-180.00 USD per AAPL
-```
-
-USD is the quote currency.
-
-## Price Annotation
-
-The `@` notation gives a price or conversion rate:
-
-```fis
-debit asset:brokerage:aapl 10 AAPL @ 180.00 USD
-```
-
-This means:
-
-```text
-10 AAPL × 180.00 USD/AAPL = 1800.00 USD
-```
-
-Similarly:
-
-```fis
-debit asset:bank:nzd 108.25 NZD @ 0.92378753 AUD
-```
-
-means each NZD is valued at approximately `0.92378753 AUD`, making the posting worth about `100 AUD`.
-
-The quantity and valuation commodity are different:
-
-- quantity: `108.25 NZD`
-- valuation: approximately `100 AUD`
-
-## Opening Balance
-
-An **opening balance** records value that existed before the journal began.
-
-```fis
-debit  asset:bank               1000.00 AUD
-credit equity:opening-balances 1000.00 AUD
-```
-
-The equity posting prevents the initial asset from appearing without an accounting source.
+An opening balance records value that existed before journal tracking began. An equity posting supplies the corresponding accounting source.
 
 ## Ledger
 
-A **ledger** organizes postings by account rather than by transaction.
-
-The journal view asks:
-
-> What events happened chronologically?
-
-The ledger view asks:
-
-> What happened to this particular account?
-
-For example, the `asset:bank` ledger would contain every posting involving that account.
+A ledger organizes postings by account rather than by transaction. Ledger reports are planned but are not yet implemented.
 
 ## Reports
 
-Reports are derived from journal data:
+The current `balance` report prints each non-zero account and commodity balance. Balance-sheet, income-statement, cash-flow, and account-ledger reports are planned.
 
-- **Balance sheet:** assets, liabilities, and equity at a point in time
-- **Income statement:** income and expenses over a period
-- **Cash-flow report:** movement of cash over a period
-- **Account ledger:** postings for a selected account
-- **Trial balance:** debit and credit balances used to verify consistency
+## Planned concepts
 
-## Validation
-
-Fiscus's examples indicate that a valid journal should enforce:
-
-- valid calendar dates
-- valid commodity precision
-- declared accounts
-- balanced transactions
-- compatible currencies or explicit conversion prices
-- unique transaction identifiers
-- exact arithmetic without floating-point rounding
-
-The DSL examples are currently exploratory—the journal, account, transaction, and posting syntax shown in `examples/` has not yet been implemented.
+Securities, custom commodities, unit prices, exchange rates, cost basis, and capital gains are not currently implemented. Their eventual syntax and accounting rules remain subject to change.
