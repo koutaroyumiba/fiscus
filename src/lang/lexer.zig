@@ -32,6 +32,7 @@ pub const Failure = struct {
 };
 
 pub const Lexer = struct {
+    source_id: source.SourceId,
     input: []const u8,
     offset: usize,
     line: usize,
@@ -41,7 +42,12 @@ pub const Lexer = struct {
     const Self = @This();
 
     pub fn init(input: []const u8) Self {
+        return initWithSource(source.root_source_id, input);
+    }
+
+    pub fn initWithSource(source_id: source.SourceId, input: []const u8) Self {
         return .{
+            .source_id = source_id,
             .input = input,
             .offset = 0,
             .line = 1,
@@ -59,6 +65,7 @@ pub const Lexer = struct {
                 .kind = .eof,
                 .lexeme = self.input[self.offset..self.offset],
                 .span = .{
+                    .source_id = self.source_id,
                     .start = start,
                     .end = start,
                 },
@@ -137,6 +144,7 @@ pub const Lexer = struct {
             .kind = kind,
             .lexeme = self.input[start_offset..self.offset],
             .span = .{
+                .source_id = self.source_id,
                 .start = start,
                 .end = self.location(),
             },
@@ -159,6 +167,7 @@ pub const Lexer = struct {
             .kind = .word,
             .lexeme = self.input[start_offset..self.offset],
             .span = .{
+                .source_id = self.source_id,
                 .start = start,
                 .end = self.location(),
             },
@@ -183,6 +192,7 @@ pub const Lexer = struct {
                     .kind = .string,
                     .lexeme = self.input[content_start..content_end],
                     .span = .{
+                        .source_id = self.source_id,
                         .start = start,
                         .end = self.location(),
                     },
@@ -200,7 +210,11 @@ pub const Lexer = struct {
     }
 
     fn fail(self: *Self, kind: FailureKind, start: source.Location) LexerError {
-        self.failure = .{ .kind = kind, .span = .{ .start = start, .end = self.location() } };
+        self.failure = .{ .kind = kind, .span = .{
+            .source_id = self.source_id,
+            .start = start,
+            .end = self.location(),
+        } };
         return switch (kind) {
             .unterminated_string => error.UnterminatedString,
             .newline_in_string => error.NewlineInString,
@@ -278,4 +292,11 @@ test "reject newline inside string" {
     var lexer = Lexer.init("\"personal\njournal\"");
 
     try std.testing.expectError(error.NewlineInString, lexer.next());
+}
+
+test "tokens retain source identity" {
+    var lexer = Lexer.initWithSource(42, "account");
+    const token = try lexer.next();
+
+    try std.testing.expectEqual(@as(source.SourceId, 42), token.span.source_id);
 }

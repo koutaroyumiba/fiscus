@@ -5,6 +5,11 @@ const lexer = @import("lang/lexer.zig");
 const loader = @import("loader.zig");
 const parser = @import("lang/parser.zig");
 const source = @import("lang/source.zig");
+const source_manager = @import("source_manager.zig");
+
+pub const DiagnosticError = error{
+    UnknownSource,
+};
 
 pub const Diagnostic = struct {
     message: []const u8,
@@ -48,6 +53,16 @@ pub fn write(
         try writer.writeByte('^');
     }
     try writer.writeByte('\n');
+}
+
+pub fn writeFromManager(
+    writer: *std.Io.Writer,
+    manager: *const source_manager.SourceManager,
+    diagnostic: Diagnostic,
+) !void {
+    const file = manager.get(diagnostic.span.source_id) orelse return error.UnknownSource;
+
+    try write(writer, file.path, file.text, diagnostic);
 }
 
 pub fn fromDecoderFailure(failure: decoder.Failure) Diagnostic {
@@ -102,6 +117,7 @@ pub fn fromParserFailure(failure: parser.Failure) Diagnostic {
                 .eof => "expected end of file",
             },
             .word => |word| expectedWordMessage(word),
+            .source_role => "expected 'accounts' or 'transactions'",
         },
         .span = failure.token.span,
     };
@@ -171,4 +187,42 @@ test "map parser failure" {
 
     try std.testing.expectEqualStrings("expected 'version'", diagnostic.message);
     try std.testing.expectEqual(@as(usize, 1), diagnostic.span.start.line);
+}
+
+test "render diagnostic from source manager" {
+    var manager = source_manager.SourceManager.init(std.testing.allocator);
+    defer manager.deinit();
+
+    _ = try manager.add("journal.fiscus", "meta version 1");
+
+    const accounts = try manager.add("accounts.fiscus", "account mystery:other");
+
+    const diagnostic = Diagnostic{
+        .message = "invalid account prefix",
+        .span = .{
+            .source_id = accounts,
+            .start = .{
+                .offset = 8,
+                .line = 1,
+                .column = 9,
+            },
+            .end = .{
+                .offset = 21,
+                .line = 1,
+                .column = 22,
+            },
+        },
+    };
+
+    var output = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer output.deinit();
+
+    try writeFromManager(&output.writer, &manager, diagnostic);
+
+    try std.testing.expectEqualStrings(
+        \\accounts.fiscus:1:9: [error] invalid account prefix
+        \\  account mystery:other
+        \\          ^^^^^^^^^^^^^
+        \\
+    , output.written());
 }

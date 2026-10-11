@@ -2,6 +2,17 @@ const std = @import("std");
 const lexer = @import("lexer.zig");
 const source = @import("source.zig");
 
+pub const SourceRole = enum {
+    accounts,
+    transactions,
+};
+
+pub const SourceStmt = struct {
+    role: SourceRole,
+    path: lexer.Token,
+    span: source.Span,
+};
+
 pub const AccountType = enum {
     asset,
     liability,
@@ -37,6 +48,7 @@ pub const Document = struct {
     version: lexer.Token,
     journal_name: lexer.Token,
 
+    sources: std.ArrayList(SourceStmt),
     accounts: std.ArrayList(AccountStmt),
     transactions: std.ArrayList(TransactionStmt),
 
@@ -46,6 +58,7 @@ pub const Document = struct {
         return .{
             .version = version,
             .journal_name = journal_name,
+            .sources = .empty,
             .accounts = .empty,
             .transactions = .empty,
         };
@@ -58,6 +71,7 @@ pub const Document = struct {
 
         self.transactions.deinit(allocator);
         self.accounts.deinit(allocator);
+        self.sources.deinit(allocator);
         self.* = undefined;
     }
 };

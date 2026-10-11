@@ -2,11 +2,13 @@ const std = @import("std");
 
 const ast = @import("ast.zig");
 const lexer = @import("lexer.zig");
+const source = @import("source.zig");
 
 // crazy use of a tagged union :D
 pub const Expected = union(enum) {
     kind: lexer.TokenKind,
     word: []const u8,
+    source_role: void,
 };
 
 pub const Failure = struct {
@@ -26,7 +28,11 @@ pub const Parser = struct {
     const Self = @This();
 
     pub fn init(input: []const u8) Self {
-        var tokenizer = lexer.Lexer.init(input);
+        return initWithSource(source.root_source_id, input);
+    }
+
+    pub fn initWithSource(source_id: source.SourceId, input: []const u8) Self {
+        var tokenizer = lexer.Lexer.initWithSource(source_id, input);
 
         const current: ?lexer.Token = tokenizer.next() catch null;
 
@@ -52,6 +58,11 @@ pub const Parser = struct {
 
         var document = ast.Document.init(version, journal_name);
         errdefer document.deinit(allocator);
+
+        while (self.matchesWord("source")) {
+            const source_statement = try self.parseSource();
+            try document.sources.append(allocator, source_statement);
+        }
 
         while (self.matchesWord("account")) {
             const account = try self.parseAccount();
@@ -112,6 +123,52 @@ pub const Parser = struct {
         return current.kind == .word and std.mem.eql(u8, current.lexeme, expected);
     }
 
+    fn parseSourceRole(self: *Self) !ast.SourceRole {
+        const current = self.current orelse return self.currentLexerError();
+
+        if (current.kind != .word) {
+            self.failure = .{
+                .token = current,
+                .expected = .{ .source_role = {} },
+            };
+
+            return error.UnexpectedToken;
+        }
+
+        const role: ast.SourceRole =
+            if (std.mem.eql(u8, current.lexeme, "accounts"))
+                .accounts
+            else if (std.mem.eql(u8, current.lexeme, "transactions"))
+                .transactions
+            else {
+                self.failure = .{
+                    .token = current,
+                    .expected = .{ .source_role = {} },
+                };
+
+                return error.UnexpectedToken;
+            };
+
+        _ = try self.advance();
+        return role;
+    }
+
+    fn parseSource(self: *Self) !ast.SourceStmt {
+        const keyword = try self.expectWord("source");
+        const role = try self.parseSourceRole();
+        const path = try self.expectKind(.string);
+
+        return .{
+            .role = role,
+            .path = path,
+            .span = .{
+                .source_id = keyword.span.source_id,
+                .start = keyword.span.start,
+                .end = path.span.end,
+            },
+        };
+    }
+
     fn parseAccount(self: *Self) !ast.AccountStmt {
         const keyword = try self.expectWord("account");
         const name = try self.expectKind(.word);
@@ -119,6 +176,7 @@ pub const Parser = struct {
         return .{
             .name = name,
             .span = .{
+                .source_id = keyword.span.source_id,
                 .start = keyword.span.start,
                 .end = name.span.end,
             },
@@ -148,6 +206,7 @@ pub const Parser = struct {
             .amount = amount,
             .commodity = commodity,
             .span = .{
+                .source_id = direction_token.span.source_id,
                 .start = direction_token.span.start,
                 .end = commodity.span.end,
             },
@@ -182,6 +241,7 @@ pub const Parser = struct {
             .description = description,
             .postings = postings,
             .span = .{
+                .source_id = keyword.span.source_id,
                 .start = keyword.span.start,
                 .end = closing_brace.span.end,
             },
@@ -287,4 +347,35 @@ test "preserve lexer failure on first token" {
 
     try std.testing.expectError(error.UnterminatedString, parser.parse(std.testing.allocator));
     try std.testing.expectEqual(lexer.FailureKind.unterminated_string, parser.lexer.failure.?.kind);
+}
+
+test "parser preserves source identity" {
+    var parser = Parser.initWithSource(7,
+        \\meta version 1
+        \\meta journal "personal"
+    );
+
+    var document = try parser.parse(std.testing.allocator);
+    defer document.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(source.SourceId, 7), document.version.span.source_id);
+    try std.testing.expectEqual(@as(source.SourceId, 7), document.journal_name.span.source_id);
+}
+
+test "parse typed source directives" {
+    var parser = Parser.init(
+        \\meta version 1
+        \\meta journal "personal"
+        \\
+        \\source accounts "accounts.fiscus"
+        \\source transactions "transactions"
+    );
+
+    var document = try parser.parse(std.testing.allocator);
+    defer document.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(usize, 2), document.sources.items.len);
+    try std.testing.expectEqual(ast.SourceRole.accounts, document.sources.items[0].role);
+    try std.testing.expectEqualStrings("accounts.fiscus", document.sources.items[0].path.lexeme);
+    try std.testing.expectEqual(ast.SourceRole.transactions, document.sources.items[1].role);
 }
