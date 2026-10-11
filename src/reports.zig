@@ -89,7 +89,7 @@ pub fn writeBalances(writer: *std.Io.Writer, journal: *const accounting.Journal,
     for (report.balances.items) |balance| {
         const account = journal.getAccount(balance.account).?;
 
-        try writer.print("{s:<30} ", .{account.name});
+        try writer.print("{s:<45} ", .{account.name});
         try journal.catalog.writeAmount(writer, balance.amount);
         try writer.writeByte('\n');
     }
@@ -144,8 +144,8 @@ test "calculate natural accounting balances" {
     try writeBalances(&output.writer, &journal, &report);
 
     try std.testing.expectEqualStrings(
-        \\asset:bank                     1000.00 AUD
-        \\equity:opening-balances        1000.00 AUD
+        \\asset:bank                                    1000.00 AUD
+        \\equity:opening-balances                       1000.00 AUD
         \\
     , output.written());
 }

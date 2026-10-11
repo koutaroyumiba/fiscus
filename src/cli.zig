@@ -3,6 +3,11 @@ const fiscus = @import("fiscus");
 
 const MAX_FILE_SIZE = 16 * 1024 * 1024;
 
+const Command = enum {
+    check,
+    balance,
+};
+
 pub fn run(
     allocator: std.mem.Allocator,
     io: std.Io,
@@ -10,10 +15,20 @@ pub fn run(
     stdout: *std.Io.Writer,
     stderr: *std.Io.Writer,
 ) !u8 {
-    if (args.len != 3 or !std.mem.eql(u8, args[1], "check")) {
-        try stderr.print("usage: fis check <file>\n", .{});
+    if (args.len != 3) {
+        try writeUsage(stderr);
         return 2;
     }
+
+    const command: Command =
+        if (std.mem.eql(u8, args[1], "check"))
+            .check
+        else if (std.mem.eql(u8, args[1], "balance"))
+            .balance
+        else {
+            try writeUsage(stderr);
+            return 2;
+        };
 
     const file_name = args[2];
     const input = std.Io.Dir.cwd().readFileAlloc(io, file_name, allocator, .limited(MAX_FILE_SIZE)) catch |err| {
@@ -26,8 +41,25 @@ pub fn run(
     defer result.deinit();
 
     return switch (result) {
-        .journal => {
-            try stdout.print("{s}: valid\n", .{file_name});
+        .journal => |journal| {
+            switch (command) {
+                .check => {
+                    try stdout.print("{s}: valid\n", .{file_name});
+                },
+                .balance => {
+                    var report = fiscus.reports.calculateBalances(allocator, &journal) catch |err| switch (err) {
+                        error.OutOfMemory => return error.OutOfMemory,
+                        error.Overflow => {
+                            try stderr.writeAll("fis: account balance overflow\n");
+                            return 1;
+                        },
+                    };
+                    defer report.deinit();
+
+                    try fiscus.reports.writeBalances(stdout, &journal, &report);
+                },
+            }
+
             return 0;
         },
         .failure => |failure| {
@@ -36,4 +68,13 @@ pub fn run(
             return 1;
         },
     };
+}
+
+fn writeUsage(writer: *std.Io.Writer) !void {
+    try writer.writeAll(
+        \\usage:
+        \\  fis check <file>
+        \\  fis balance <file>
+        \\
+    );
 }
