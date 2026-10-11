@@ -5,6 +5,7 @@ pub const diagnostics = @import("diagnostics.zig");
 pub const lang = @import("lang/root.zig");
 pub const loader = @import("loader.zig");
 pub const money = @import("money.zig");
+pub const reports = @import("reports.zig");
 pub const time = @import("time.zig");
 
 test {
@@ -15,5 +16,6 @@ test {
     _ = lang;
     _ = loader;
     _ = money;
+    _ = reports;
     _ = time;
 }
