@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const decoder = @import("decoder.zig");
+const lexer = @import("lang/lexer.zig");
 const source = @import("lang/source.zig");
 
 pub const Diagnostic = struct {
@@ -73,6 +74,16 @@ pub fn fromDecoderFailure(failure: decoder.Failure) Diagnostic {
             .multiple_commodities => "transaction contains multiple commodities",
             .transaction_total_overflow => "transaction total is too large",
             .unbalanced_transaction => "transaction debits and credits do not balance",
+        },
+        .span = failure.span,
+    };
+}
+
+pub fn fromLexerFailure(failure: lexer.Failure) Diagnostic {
+    return .{
+        .message = switch (failure.kind) {
+            .unterminated_string => "unterminated string",
+            .newline_in_string => "strings cannot contain newlines",
         },
         .span = failure.span,
     };

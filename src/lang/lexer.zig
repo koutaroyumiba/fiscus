@@ -21,11 +21,22 @@ pub const LexerError = error{
     NewlineInString,
 };
 
+pub const FailureKind = enum {
+    unterminated_string,
+    newline_in_string,
+};
+
+pub const Failure = struct {
+    kind: FailureKind,
+    span: source.Span,
+};
+
 pub const Lexer = struct {
     input: []const u8,
     offset: usize,
     line: usize,
     column: usize,
+    failure: ?Failure,
 
     const Self = @This();
 
@@ -35,6 +46,7 @@ pub const Lexer = struct {
             .offset = 0,
             .line = 1,
             .column = 1,
+            .failure = null,
         };
     }
 
@@ -178,13 +190,21 @@ pub const Lexer = struct {
             }
 
             if (byte == '\n' or byte == '\r') {
-                return error.NewlineInString;
+                return self.fail(.newline_in_string, start);
             }
 
             _ = self.advance();
         }
 
-        return error.UnterminatedString;
+        return self.fail(.unterminated_string, start);
+    }
+
+    fn fail(self: *Self, kind: FailureKind, start: source.Location) LexerError {
+        self.failure = .{ .kind = kind, .span = .{ .start = start, .end = self.location() } };
+        return switch (kind) {
+            .unterminated_string => error.UnterminatedString,
+            .newline_in_string => error.NewlineInString,
+        };
     }
 };
 
