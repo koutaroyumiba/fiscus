@@ -73,7 +73,7 @@ pub const Catalog = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: std.mem.Allocator) !Catalog {
+    pub fn init(allocator: std.mem.Allocator) std.mem.Allocator.Error!Catalog {
         var self = Self{
             .allocator = allocator,
             .commodities = .empty,
@@ -82,9 +82,9 @@ pub const Catalog = struct {
         errdefer self.deinit();
 
         // built-in commodities (follows ISO 4217)
-        _ = try self.add("AUD", .currency, 2, null);
-        _ = try self.add("NZD", .currency, 2, null);
-        _ = try self.add("USD", .currency, 2, null);
+        try self.addBuiltin("AUD", 2);
+        try self.addBuiltin("NZD", 2);
+        try self.addBuiltin("USD", 2);
 
         return self;
     }
@@ -279,6 +279,19 @@ pub const Catalog = struct {
         }
 
         return value;
+    }
+
+    fn addBuiltin(self: *Self, symbol: []const u8, scale: u8) std.mem.Allocator.Error!void {
+        _ = self.add(symbol, .currency, scale, null) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+
+            error.InvalidSymbol,
+            error.InvalidScale,
+            error.DuplicateSymbol,
+            error.UnknownQuoteCommodity,
+            error.TooManyCommodities,
+            => unreachable,
+        };
     }
 };
 
