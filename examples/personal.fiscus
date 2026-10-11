@@ -1,0 +1,112 @@
+# Reference-sized personal journal using the currently supported Fiscus syntax.
+
+meta version 1
+meta journal "personal"
+
+account asset:bank:example-bank:au:everyday
+account asset:bank:example-bank:au:savings
+
+# Liabilities and equity
+account liability:credit-card:example-bank:au
+account equity:opening-balances
+
+# Income
+account income:employment:example-employer:salary
+account income:interest
+
+# Expenses
+account expense:housing:rent
+account expense:food:groceries
+account expense:food:dining
+account expense:utilities:electricity
+account expense:utilities:phone
+account expense:transport:public
+account expense:subscriptions:software
+account expense:financial:bank-fees
+
+transaction 2026-01-01 "Opening balances" {
+    debit  asset:bank:example-bank:au:everyday  2500.00 AUD
+    debit  asset:bank:example-bank:au:savings  12000.00 AUD
+    credit liability:credit-card:example-bank:au 450.00 AUD
+    credit equity:opening-balances             14050.00 AUD
+}
+
+transaction 2026-01-05 "January rent" {
+    debit  expense:housing:rent                    1800.00 AUD
+    credit asset:bank:example-bank:au:everyday     1800.00 AUD
+}
+
+transaction 2026-01-08 "Groceries" {
+    debit  expense:food:groceries                   124.65 AUD
+    credit liability:credit-card:example-bank:au    124.65 AUD
+}
+
+transaction 2026-01-12 "Electricity bill" {
+    debit  expense:utilities:electricity              96.40 AUD
+    credit asset:bank:example-bank:au:everyday         96.40 AUD
+}
+
+transaction 2026-01-15 "January salary" id salary-2026-01 {
+    debit  asset:bank:example-bank:au:everyday          3200.00 AUD
+    credit income:employment:example-employer:salary    3200.00 AUD
+}
+
+transaction 2026-01-16 "Transfer to savings" {
+    debit  asset:bank:example-bank:au:savings       500.00 AUD
+    credit asset:bank:example-bank:au:everyday      500.00 AUD
+}
+
+transaction 2026-01-18 "Public transport" {
+    debit  expense:transport:public                  42.80 AUD
+    credit asset:bank:example-bank:au:everyday       42.80 AUD
+}
+
+transaction 2026-01-20 "Dinner" {
+    debit  expense:food:dining                        67.50 AUD
+    credit liability:credit-card:example-bank:au      67.50 AUD
+}
+
+transaction 2026-01-22 "Software subscription" {
+    debit  expense:subscriptions:software             18.99 AUD
+    credit asset:bank:example-bank:au:everyday         18.99 AUD
+}
+
+transaction 2026-01-25 "Credit card payment" {
+    debit  liability:credit-card:example-bank:au      600.00 AUD
+    credit asset:bank:example-bank:au:everyday        600.00 AUD
+}
+
+transaction 2026-01-31 "Savings interest" {
+    debit  asset:bank:example-bank:au:savings          21.34 AUD
+    credit income:interest                             21.34 AUD
+}
+
+transaction 2026-02-01 "February rent" {
+    debit  expense:housing:rent                    1800.00 AUD
+    credit asset:bank:example-bank:au:everyday     1800.00 AUD
+}
+
+transaction 2026-02-04 "Groceries" {
+    debit  expense:food:groceries                    93.27 AUD
+    credit asset:bank:example-bank:au:everyday       93.27 AUD
+}
+
+transaction 2026-02-10 "Phone bill" {
+    debit  expense:utilities:phone                    45.00 AUD
+    credit asset:bank:example-bank:au:everyday        45.00 AUD
+}
+
+transaction 2026-02-15 "February salary" id salary-2026-02 {
+    debit  asset:bank:example-bank:au:everyday          3200.00 AUD
+    credit income:employment:example-employer:salary    3200.00 AUD
+}
+
+transaction 2026-02-16 "Transfer to savings" {
+    debit  asset:bank:example-bank:au:savings       700.00 AUD
+    credit asset:bank:example-bank:au:everyday      700.00 AUD
+}
+
+transaction 2026-02-20 "Monthly account fee" {
+    debit  expense:financial:bank-fees                5.00 AUD
+    credit asset:bank:example-bank:au:everyday         5.00 AUD
+}
