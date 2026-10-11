@@ -63,3 +63,22 @@ test "report unknown posting account" {
         .journal => return error.ExpectedFailure,
     }
 }
+
+test "reject unbalanced fixture" {
+    const input = @embedFile("fixtures/unbalanced.fiscus");
+    var result = try fiscus.loader.load(std.testing.allocator, input);
+    defer result.deinit();
+
+    switch (result) {
+        .failure => |failure| switch (failure) {
+            .decoder => |decoder_failure| {
+                try std.testing.expectEqual(fiscus.decoder.FailureKind.unbalanced_transaction, decoder_failure.kind);
+
+                const diagnostic = fiscus.diagnostics.fromLoadFailure(failure);
+                try std.testing.expectEqualStrings("transaction debits and credits do not balance", diagnostic.message);
+            },
+            else => return error.UnexpectedFailureKind,
+        },
+        .journal => return error.ExpectedFailure,
+    }
+}

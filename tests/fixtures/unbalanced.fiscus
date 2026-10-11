@@ -1,0 +1,10 @@
+meta version 1
+meta journal "invalid"
+
+account asset:bank
+account expense:groceries
+
+transaction 2026-03-02 "Incorrect totals" {
+  debit expense:groceries 20.00 AUD
+  credit asset:bank 19.00 AUD
+}
