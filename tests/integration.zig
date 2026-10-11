@@ -21,7 +21,7 @@ test "parse and decode complete journal" {
         \\}
     ;
 
-    var parser = try fiscus.lang.parser.Parser.init(input);
+    var parser = fiscus.lang.parser.Parser.init(input);
     var document = try parser.parse(std.testing.allocator);
     defer document.deinit(std.testing.allocator);
 
@@ -50,7 +50,7 @@ test "report unknown posting account" {
         \\}
     ;
 
-    var parser = try fiscus.lang.parser.Parser.init(input);
+    var parser = fiscus.lang.parser.Parser.init(input);
     var document = try parser.parse(std.testing.allocator);
     defer document.deinit(std.testing.allocator);
 

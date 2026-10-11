@@ -20,14 +20,15 @@ pub const ParserError = error{
 
 pub const Parser = struct {
     lexer: lexer.Lexer,
-    current: lexer.Token,
+    current: ?lexer.Token,
     failure: ?Failure,
 
     const Self = @This();
 
-    pub fn init(input: []const u8) lexer.LexerError!Self {
+    pub fn init(input: []const u8) Self {
         var tokenizer = lexer.Lexer.init(input);
-        const current = try tokenizer.next();
+
+        const current: ?lexer.Token = tokenizer.next() catch null;
 
         return .{
             .lexer = tokenizer,
@@ -37,6 +38,10 @@ pub const Parser = struct {
     }
 
     pub fn parse(self: *Self, allocator: std.mem.Allocator) !ast.Document {
+        if (self.current == null) {
+            return self.currentLexerError();
+        }
+
         _ = try self.expectWord("meta");
         _ = try self.expectWord("version");
         const version = try self.expectKind(.word);
@@ -68,15 +73,17 @@ pub const Parser = struct {
     }
 
     fn advance(self: *Self) !lexer.Token {
-        const consumed = self.current;
+        const consumed = self.current orelse return self.currentLexerError();
         self.current = try self.lexer.next();
         return consumed;
     }
 
     fn expectKind(self: *Self, expected: lexer.TokenKind) !lexer.Token {
-        if (self.current.kind != expected) {
+        const current = self.current orelse return self.currentLexerError();
+
+        if (current.kind != expected) {
             self.failure = .{
-                .token = self.current,
+                .token = current,
                 .expected = .{ .kind = expected },
             };
 
@@ -87,9 +94,11 @@ pub const Parser = struct {
     }
 
     fn expectWord(self: *Self, expected: []const u8) !lexer.Token {
-        if (self.current.kind != .word or !std.mem.eql(u8, self.current.lexeme, expected)) {
+        const current = self.current orelse return self.currentLexerError();
+
+        if (current.kind != .word or !std.mem.eql(u8, current.lexeme, expected)) {
             self.failure = .{
-                .token = self.current,
+                .token = current,
                 .expected = .{ .word = expected },
             };
 
@@ -100,7 +109,8 @@ pub const Parser = struct {
     }
 
     fn matchesWord(self: *const Self, expected: []const u8) bool {
-        return self.current.kind == .word and std.mem.eql(u8, self.current.lexeme, expected);
+        const current = self.current orelse return false;
+        return current.kind == .word and std.mem.eql(u8, current.lexeme, expected);
     }
 
     fn parseAccount(self: *Self) !ast.AccountStmt {
@@ -117,7 +127,7 @@ pub const Parser = struct {
     }
 
     fn parsePosting(self: *Self) !ast.PostingStmt {
-        const direction_token = self.current;
+        const direction_token = self.current.?;
 
         const direction: ast.Direction =
             if (self.matchesWord("debit"))
@@ -178,10 +188,19 @@ pub const Parser = struct {
             },
         };
     }
+
+    fn currentLexerError(self: *const Self) lexer.LexerError {
+        const failure = self.lexer.failure orelse unreachable;
+
+        return switch (failure.kind) {
+            .unterminated_string => error.UnterminatedString,
+            .newline_in_string => error.NewlineInString,
+        };
+    }
 };
 
 test "parse required metadata" {
-    var parser = try Parser.init(
+    var parser = Parser.init(
         \\meta version 1
         \\meta journal "personal"
     );
@@ -197,7 +216,7 @@ test "parse required metadata" {
 }
 
 test "require version metadata first" {
-    var parser = try Parser.init(
+    var parser = Parser.init(
         \\meta journal "personal"
         \\meta version 1
     );
@@ -216,7 +235,7 @@ test "require version metadata first" {
 }
 
 test "parse account declarations" {
-    var parser = try Parser.init(
+    var parser = Parser.init(
         \\meta version 1
         \\meta journal "personal"
         \\
@@ -236,7 +255,7 @@ test "parse account declarations" {
 }
 
 test "parse transaction and postings" {
-    var parser = try Parser.init(
+    var parser = Parser.init(
         \\meta version 1
         \\meta journal "personal"
         \\
@@ -262,4 +281,11 @@ test "parse transaction and postings" {
     try std.testing.expectEqual(@as(usize, 2), transaction.postings.items.len);
     try std.testing.expectEqual(ast.Direction.debit, transaction.postings.items[0].direction);
     try std.testing.expectEqualStrings("82.40", transaction.postings.items[0].amount.lexeme);
+}
+
+test "preserve lexer failure on first token" {
+    var parser = Parser.init("\"unterminated");
+
+    try std.testing.expectError(error.UnterminatedString, parser.parse(std.testing.allocator));
+    try std.testing.expectEqual(lexer.FailureKind.unterminated_string, parser.lexer.failure.?.kind);
 }
