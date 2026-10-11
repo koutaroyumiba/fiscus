@@ -149,3 +149,28 @@ test "calculate natural accounting balances" {
         \\
     , output.written());
 }
+
+test "report separate balances per commodity" {
+    var journal = try accounting.Journal.init(std.testing.allocator, 1, "multi-currency");
+    defer journal.deinit();
+
+    const cash = try journal.addAccount("asset:cash");
+    const opening = try journal.addAccount("equity:opening-balances");
+
+    const aud_transaction = try journal.addTransaction(null, try time.Date.parse("2026-01-01"), "AUD opening balance");
+    const aud = try journal.catalog.parseAmount("100.00", "AUD");
+
+    try journal.addPosting(aud_transaction, .debit, cash, aud);
+    try journal.addPosting(aud_transaction, .credit, opening, aud);
+
+    const usd_transaction = try journal.addTransaction(null, try time.Date.parse("2026-01-01"), "USD opening balance");
+    const usd = try journal.catalog.parseAmount("50.00", "USD");
+
+    try journal.addPosting(usd_transaction, .debit, cash, usd);
+    try journal.addPosting(usd_transaction, .credit, opening, usd);
+
+    var report = try calculateBalances(std.testing.allocator, &journal);
+    defer report.deinit();
+
+    try std.testing.expectEqual(@as(usize, 4), report.balances.items.len);
+}

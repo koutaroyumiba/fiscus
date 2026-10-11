@@ -5,6 +5,7 @@ meta journal "personal"
 
 account asset:bank:example-bank:au:everyday
 account asset:bank:example-bank:au:savings
+account asset:bank:example-bank:us:checking
 
 # Liabilities and equity
 account liability:credit-card:example-bank:au
@@ -12,6 +13,7 @@ account equity:opening-balances
 
 # Income
 account income:employment:example-employer:salary
+account income:freelance:example-client
 account income:interest
 
 # Expenses
@@ -23,6 +25,7 @@ account expense:utilities:phone
 account expense:transport:public
 account expense:subscriptions:software
 account expense:financial:bank-fees
+account expense:travel:accommodation
 
 transaction 2026-01-01 "Opening balances" {
     debit  asset:bank:example-bank:au:everyday  2500.00 AUD
@@ -109,4 +112,21 @@ transaction 2026-02-16 "Transfer to savings" {
 transaction 2026-02-20 "Monthly account fee" {
     debit  expense:financial:bank-fees                5.00 AUD
     credit asset:bank:example-bank:au:everyday         5.00 AUD
+}
+
+# Each transaction still balances in one currency. The journal and individual
+# accounts may carry independent balances in multiple currencies.
+transaction 2026-03-01 "USD opening balance" {
+    debit  asset:bank:example-bank:us:checking 1500.00 USD
+    credit equity:opening-balances             1500.00 USD
+}
+
+transaction 2026-03-05 "Freelance payment" id freelance-2026-03 {
+    debit  asset:bank:example-bank:us:checking 850.00 USD
+    credit income:freelance:example-client     850.00 USD
+}
+
+transaction 2026-03-08 "Hotel booking" {
+    debit  expense:travel:accommodation        320.00 USD
+    credit asset:bank:example-bank:us:checking 320.00 USD
 }
