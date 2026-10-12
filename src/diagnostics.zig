@@ -85,7 +85,11 @@ pub fn fromDecoderFailure(failure: decoder.Failure) Diagnostic {
 
             .invalid_date => "invalid transaction date",
             .invalid_transaction_id => "invalid transaction ID",
+            .invalid_transaction_note => "transaction note cannot be empty",
+            .invalid_transaction_tag => "invalid transaction tag",
+            .duplicate_transaction_field => "transaction field appears more than once",
             .duplicate_transaction_id => "transaction ID is already in use",
+            .duplicate_transaction_tag => "transaction tag appears more than once",
             .too_many_transactions => "journal contains too many transactions",
 
             .unknown_account => "posting references an unknown account",

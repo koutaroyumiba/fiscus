@@ -73,6 +73,7 @@ pub const Parser = struct {
             var transaction = try self.parseTransaction(allocator);
 
             document.transactions.append(allocator, transaction) catch |err| {
+                transaction.fields.deinit(allocator);
                 transaction.postings.deinit(allocator);
                 return err;
             };
@@ -213,6 +214,39 @@ pub const Parser = struct {
         };
     }
 
+    fn matchesTransactionField(self: *const Self) bool {
+        return self.matchesWord("id") or self.matchesWord("note") or self.matchesWord("tag");
+    }
+
+    fn parseTransactionField(self: *Self) !ast.TransactionFieldStmt {
+        const keyword = self.current.?;
+        const kind: ast.TransactionFieldKind =
+            if (self.matchesWord("id"))
+                .id
+            else if (self.matchesWord("note"))
+                .note
+            else if (self.matchesWord("tag"))
+                .tag
+            else
+                unreachable;
+
+        _ = try self.advance();
+        const value = switch (kind) {
+            .id, .tag => try self.expectKind(.word),
+            .note => try self.expectKind(.string),
+        };
+
+        return .{
+            .kind = kind,
+            .value = value,
+            .span = .{
+                .source_id = keyword.span.source_id,
+                .start = keyword.span.start,
+                .end = value.span.end,
+            },
+        };
+    }
+
     fn parseTransaction(self: *Self, allocator: std.mem.Allocator) !ast.TransactionStmt {
         const keyword = try self.expectWord("transaction");
         const date = try self.expectKind(.word);
@@ -224,10 +258,12 @@ pub const Parser = struct {
 
         _ = try self.expectKind(.left_brace);
 
-        var id: ?lexer.Token = null;
-        if (self.matchesWord("id")) {
-            _ = try self.advance();
-            id = try self.expectKind(.word);
+        var fields: std.ArrayList(ast.TransactionFieldStmt) = .empty;
+        errdefer fields.deinit(allocator);
+
+        while (self.matchesTransactionField()) {
+            const field = try self.parseTransactionField();
+            try fields.append(allocator, field);
         }
 
         var postings: std.ArrayList(ast.PostingStmt) = .empty;
@@ -240,9 +276,9 @@ pub const Parser = struct {
 
         const closing_brace = try self.expectKind(.right_brace);
         return .{
-            .id = id,
             .date = date,
             .narration = narration,
+            .fields = fields,
             .postings = postings,
             .span = .{
                 .source_id = keyword.span.source_id,
@@ -327,6 +363,9 @@ test "parse transaction and postings" {
         \\
         \\transaction 2026-01-17 "Groceries" {
         \\  id groceries-001
+        \\  note "Weekly shop"
+        \\  tag shared
+        \\  tag groceries
         \\  debit expense:groceries 82.40 AUD
         \\  credit asset:bank 82.40 AUD
         \\}
@@ -341,7 +380,9 @@ test "parse transaction and postings" {
 
     try std.testing.expectEqualStrings("2026-01-17", transaction.date.lexeme);
     try std.testing.expectEqualStrings("Groceries", transaction.narration.?.lexeme);
-    try std.testing.expectEqualStrings("groceries-001", transaction.id.?.lexeme);
+    try std.testing.expectEqual(@as(usize, 4), transaction.fields.items.len);
+    try std.testing.expectEqual(ast.TransactionFieldKind.id, transaction.fields.items[0].kind);
+    try std.testing.expectEqualStrings("groceries-001", transaction.fields.items[0].value.lexeme);
     try std.testing.expectEqual(@as(usize, 2), transaction.postings.items.len);
     try std.testing.expectEqual(ast.Direction.debit, transaction.postings.items[0].direction);
     try std.testing.expectEqualStrings("82.40", transaction.postings.items[0].amount.lexeme);

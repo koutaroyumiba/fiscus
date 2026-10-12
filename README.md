@@ -48,6 +48,8 @@ transaction 2026-01-01 "Opening balance" {
 
 transaction 2026-01-15 "Salary" {
     id salary-2026-01
+    note "Monthly salary payment"
+    tag income
 
     debit  asset:bank    3000.00 AUD
     credit income:salary 3000.00 AUD
@@ -74,7 +76,7 @@ Account type is inferred from the first component of its name. Supported roots a
 - `income`
 - `expense`
 
-Transaction narrations and IDs are optional. When supplied, an ID appears inside the transaction body before its postings and must be unique.
+Transaction narrations and metadata are optional. A transaction body may contain one unique `id`, one quoted `note`, and any number of unique machine-readable `tag` fields before its postings.
 
 See [`docs/language.md`](docs/language.md) for the implemented grammar and validation rules, and [`docs/glossary.md`](docs/glossary.md) for accounting terminology.
 
@@ -85,7 +87,7 @@ See [`docs/language.md`](docs/language.md) for the implemented grammar and valid
 - Securities and custom commodity declarations are not supported.
 - Only AUD, NZD, and USD are built in; a complete ISO 4217 catalog is planned.
 - Strings do not support escapes or newlines.
-- Account lifecycle dates, transaction metadata, and file editing are not supported.
+- Account lifecycle dates, typed external references, transaction links, and file editing are not supported.
 - The only report currently implemented is account balances.
 
 ## Project structure

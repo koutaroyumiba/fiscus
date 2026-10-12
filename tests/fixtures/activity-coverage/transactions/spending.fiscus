@@ -3,6 +3,9 @@ meta journal "activity-coverage"
 
 transaction 2026-01-11 "Groceries" {
     id groceries-2026-01-11
+    note "Ordinary bank purchase"
+    tag groceries
+
     debit  expense:food:groceries  120.00 NZD
     credit asset:bank:nzd:everyday 120.00 NZD
 }
@@ -16,6 +19,9 @@ transaction 2026-01-12 "Groceries and household supplies" {
 
 transaction 2026-01-13 "Grocery refund" {
     id refund-2026-01-13
+    note "Partial reversal of an earlier grocery purchase"
+    tag refund
+
     debit  asset:bank:nzd:everyday 20.00 NZD
     credit expense:food:groceries  20.00 NZD
 }

@@ -61,6 +61,8 @@ equity:<category>
 
 A transaction records a dated event with two or more postings. Posting amounts are positive; `debit` and `credit` represent accounting direction.
 
+A transaction may also have an optional narration, stable ID, note, and machine-readable tags. The note preserves structured context, while tags classify properties that cut across the account hierarchy, such as `shared` or `reimbursable`. Ordinary counterparties may remain in the narration; parties with outstanding balances can be represented by receivable or payable accounts.
+
 For the current MVP, all postings in a transaction must use the same commodity and total debits must exactly equal total credits.
 
 ## Natural balances

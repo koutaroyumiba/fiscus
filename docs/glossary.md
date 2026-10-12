@@ -63,6 +63,21 @@ transaction 2026-01-17 "Groceries" {
 
 Transactions without a narration or explicit ID are valid.
 
+A transaction may also contain one note and multiple unique tags before its postings:
+
+```fiscus
+transaction 2026-01-17 "Groceries" {
+    note "Weekly shared grocery shop"
+    tag shared
+    tag reimbursable
+
+    debit  expense:food:groceries 82.40 AUD
+    credit asset:bank             82.40 AUD
+}
+```
+
+A note preserves additional human-readable context. Tags are short machine-readable labels for classifications that do not naturally belong in the account hierarchy.
+
 ## Posting
 
 A posting is one account's side of a transaction:

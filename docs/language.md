@@ -139,6 +139,34 @@ transaction 2026-01-17 "Groceries" {
 
 Explicit transaction IDs must be non-empty and unique within the journal.
 
+### Transaction fields
+
+A transaction may contain metadata fields before its first posting. Fields may appear in any order.
+
+```fiscus
+transaction 2026-01-17 "Groceries" {
+    id groceries-001
+    note "Weekly shared grocery shop"
+    tag shared
+    tag reimbursable
+
+    debit  expense:food:groceries 82.40 AUD
+    credit asset:bank             82.40 AUD
+}
+```
+
+The supported fields are:
+
+- `id WORD`: an optional stable identity that must be unique across the journal;
+- `note STRING`: optional additional context attached to the transaction;
+- `tag WORD`: a repeatable machine-readable classification.
+
+`id` and `note` may each appear at most once in a transaction. A note cannot be empty. Tags must be unique within a transaction.
+
+A tag starts with a lowercase ASCII letter. Remaining characters may be lowercase letters, digits, `-`, or `_`. Examples include `shared`, `reimbursable`, and `tax-deductible`.
+
+Transaction fields must precede all postings. Once the first posting appears, no further transaction fields are allowed.
+
 ## Postings
 
 ```fiscus
@@ -183,6 +211,9 @@ A valid journal requires:
 - at least two postings per transaction;
 - equal debit and credit totals in one commodity;
 - unique explicit transaction IDs;
+- non-empty transaction notes;
+- syntactically valid, unique tags within each transaction;
+- no repeated singleton transaction fields;
 - matching journal names across a workspace;
 - role-appropriate contents in sourced files;
 - source directives only in the root journal.
@@ -191,7 +222,7 @@ All amount arithmetic is checked for integer overflow.
 
 ## Strings
 
-Journal names and transaction narrations are surrounded by double quotes. Transaction narrations are optional. Escape sequences and multiline strings are not currently supported.
+Journal names, transaction narrations, and transaction notes are surrounded by double quotes. Narrations and notes are optional. Escape sequences and multiline strings are not currently supported.
 
 ## Planned syntax
 
@@ -199,5 +230,5 @@ The following concepts are planned but are not part of version 1 as currently im
 
 - custom commodity and security declarations;
 - price and exchange-rate annotations;
-- transaction metadata and tags;
+- typed external references and transaction links;
 - account opening and closing dates.

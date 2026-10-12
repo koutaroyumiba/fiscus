@@ -33,9 +33,8 @@ This fixture records realistic personal activity using the current Fiscus langua
 |---|---|---|
 | Salary | Net cash and income | Gross pay, withholding and retirement deductions |
 | Cash dividend | Cash and dividend income | Related security holding |
-| Refund | Accounting reversal | Explicit link to original purchase |
-| Reimbursement | Receivable settlement | Explicit link to original expense |
-| Purchase | Description and accounting | Structured payee, notes and tags |
+| Refund | Accounting reversal, note and tag | Explicit link to original purchase |
+| Reimbursement | Receivable settlement, note and tags | Explicit link to original expense |
 
 ## Not faithfully representable
 
@@ -85,4 +84,6 @@ Selected final natural balances:
 - Record opening balances against `equity:opening-balances`.
 - Record transactions after they clear.
 - Give every transaction a stable ID.
+- Use notes for additional human-readable context.
+- Use tags for classifications that cut across the account hierarchy.
 - Do not approximate currency conversions or investment activity using incomplete entries.

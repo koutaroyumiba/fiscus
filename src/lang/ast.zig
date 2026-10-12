@@ -36,10 +36,22 @@ pub const PostingStmt = struct {
     span: source.Span,
 };
 
+pub const TransactionFieldKind = enum {
+    id,
+    note,
+    tag,
+};
+
+pub const TransactionFieldStmt = struct {
+    kind: TransactionFieldKind,
+    value: lexer.Token,
+    span: source.Span,
+};
+
 pub const TransactionStmt = struct {
-    id: ?lexer.Token,
     date: lexer.Token,
     narration: ?lexer.Token,
+    fields: std.ArrayList(TransactionFieldStmt),
     postings: std.ArrayList(PostingStmt),
     span: source.Span,
 };
@@ -67,6 +79,7 @@ pub const Document = struct {
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
         for (self.transactions.items) |*transaction| {
             transaction.postings.deinit(allocator);
+            transaction.fields.deinit(allocator);
         }
 
         self.transactions.deinit(allocator);

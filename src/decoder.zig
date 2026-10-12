@@ -23,7 +23,11 @@ pub const FailureKind = enum {
 
     invalid_date,
     invalid_transaction_id,
+    invalid_transaction_note,
+    invalid_transaction_tag,
+    duplicate_transaction_field,
     duplicate_transaction_id,
+    duplicate_transaction_tag,
     too_many_transactions,
 
     unknown_account,
@@ -212,22 +216,63 @@ pub const Decoder = struct {
         const date = time.Date.parse(transaction.date.lexeme) catch {
             return self.fail(.invalid_date, transaction.date.span);
         };
-
-        const id = if (transaction.id) |token| token.lexeme else null;
         const narration = if (transaction.narration) |token| token.lexeme else null;
+
+        var id_field: ?ast.TransactionFieldStmt = null;
+        var note_field: ?ast.TransactionFieldStmt = null;
+
+        for (transaction.fields.items) |field| {
+            switch (field.kind) {
+                .id => {
+                    if (id_field != null) {
+                        return self.fail(.duplicate_transaction_field, field.span);
+                    }
+                    id_field = field;
+                },
+                .note => {
+                    if (note_field != null) {
+                        return self.fail(.duplicate_transaction_field, field.span);
+                    }
+                    note_field = field;
+                },
+                .tag => {},
+            }
+        }
+
+        const id = if (id_field) |field| field.value.lexeme else null;
+        const note = if (note_field) |field| field.value.lexeme else null;
+
         const transaction_index = journal.addTransaction(.{
             .date = date,
-            .id = id,
             .narration = narration,
+            .id = id,
+            .note = note,
         }) catch |err| {
-            const id_span = if (transaction.id) |token| token.span else transaction.span;
+            const id_span = if (id_field) |field| field.span else transaction.span;
+            const note_span = if (note_field) |field| field.span else transaction.span;
             return switch (err) {
                 error.OutOfMemory => error.OutOfMemory,
                 error.InvalidTransactionId => self.fail(.invalid_transaction_id, id_span),
+                error.InvalidTransactionNote => self.fail(.invalid_transaction_note, note_span),
                 error.DuplicateTransactionId => self.fail(.duplicate_transaction_id, id_span),
                 error.TooManyTransactions => self.fail(.too_many_transactions, transaction.span),
             };
         };
+
+        for (transaction.fields.items) |field| {
+            if (field.kind != .tag) {
+                continue;
+            }
+
+            journal.addTransactionTag(transaction_index, field.value.lexeme) catch |err| {
+                return switch (err) {
+                    error.OutOfMemory => error.OutOfMemory,
+                    error.InvalidTransactionTag => self.fail(.invalid_transaction_tag, field.span),
+                    error.DuplicateTransactionTag => self.fail(.duplicate_transaction_tag, field.span),
+                    error.UnknownTransaction => unreachable,
+                };
+            };
+        }
 
         for (transaction.postings.items) |posting| {
             try self.decodePosting(journal, transaction_index, posting);

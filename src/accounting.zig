@@ -30,6 +30,8 @@ pub const Transaction = struct {
     id: ?[]const u8,
     date: time.Date,
     narration: ?[]const u8,
+    note: ?[]const u8,
+    tags: std.ArrayList([]const u8),
     postings: std.ArrayList(Posting),
 };
 
@@ -37,13 +39,17 @@ pub const NewTransaction = struct {
     date: time.Date,
     id: ?[]const u8 = null,
     narration: ?[]const u8 = null,
+    note: ?[]const u8 = null,
 };
 
 pub const JournalError = error{
     InvalidAccountName,
     DuplicateAccount,
     DuplicateTransactionId,
+    DuplicateTransactionTag,
     InvalidTransactionId,
+    InvalidTransactionNote,
+    InvalidTransactionTag,
     UnknownAccount,
     UnknownCommodity,
     UnknownTransaction,
@@ -100,13 +106,20 @@ pub const Journal = struct {
         self.transaction_indices_by_id.deinit();
 
         for (self.transactions.items) |*transaction| {
-            if (transaction.id) |id| {
-                self.allocator.free(id);
-            }
-
             if (transaction.narration) |narration| {
                 self.allocator.free(narration);
             }
+            if (transaction.id) |id| {
+                self.allocator.free(id);
+            }
+            if (transaction.note) |note| {
+                self.allocator.free(note);
+            }
+            for (transaction.tags.items) |tag| {
+                self.allocator.free(tag);
+            }
+
+            transaction.tags.deinit(self.allocator);
             transaction.postings.deinit(self.allocator);
         }
 
@@ -183,6 +196,12 @@ pub const Journal = struct {
             }
         }
 
+        if (new_transaction.note) |note| {
+            if (note.len == 0) {
+                return error.InvalidTransactionNote;
+            }
+        }
+
         if (self.transactions.items.len > std.math.maxInt(TransactionIndex)) {
             return error.TooManyTransactions;
         }
@@ -190,15 +209,6 @@ pub const Journal = struct {
         try self.transactions.ensureUnusedCapacity(self.allocator, 1);
         if (new_transaction.id != null) {
             try self.transaction_indices_by_id.ensureUnusedCapacity(1);
-        }
-
-        var owned_id: ?[]u8 = null;
-        errdefer if (owned_id) |id| {
-            self.allocator.free(id);
-        };
-
-        if (new_transaction.id) |id| {
-            owned_id = try self.allocator.dupe(u8, id);
         }
 
         var owned_narration: ?[]u8 = null;
@@ -210,11 +220,31 @@ pub const Journal = struct {
             owned_narration = try self.allocator.dupe(u8, narration);
         }
 
+        var owned_id: ?[]u8 = null;
+        errdefer if (owned_id) |id| {
+            self.allocator.free(id);
+        };
+
+        if (new_transaction.id) |id| {
+            owned_id = try self.allocator.dupe(u8, id);
+        }
+
+        var owned_note: ?[]u8 = null;
+        errdefer if (owned_note) |note| {
+            self.allocator.free(note);
+        };
+
+        if (new_transaction.note) |note| {
+            owned_note = try self.allocator.dupe(u8, note);
+        }
+
         const index: TransactionIndex = @intCast(self.transactions.items.len);
         self.transactions.appendAssumeCapacity(.{
-            .id = owned_id,
             .date = new_transaction.date,
             .narration = owned_narration,
+            .id = owned_id,
+            .note = owned_note,
+            .tags = .empty,
             .postings = .empty,
         });
 
@@ -223,6 +253,30 @@ pub const Journal = struct {
         }
 
         return index;
+    }
+
+    pub fn addTransactionTag(self: *Self, transaction_index: TransactionIndex, tag: []const u8) !void {
+        const index = std.math.cast(usize, transaction_index) orelse return error.UnknownTransaction;
+
+        if (index >= self.transactions.items.len) {
+            return error.UnknownTransaction;
+        }
+
+        if (!isValidTag(tag)) {
+            return error.InvalidTransactionTag;
+        }
+
+        const transaction = &self.transactions.items[index];
+        for (transaction.tags.items) |existing| {
+            if (std.mem.eql(u8, existing, tag)) {
+                return error.DuplicateTransactionTag;
+            }
+        }
+
+        const owned = try self.allocator.dupe(u8, tag);
+        errdefer self.allocator.free(owned);
+
+        try transaction.tags.append(self.allocator, owned);
     }
 
     pub fn addPosting(self: *Self, transaction_index: TransactionIndex, direction: Direction, account: AccountId, amount: commodity.Amount) !void {
@@ -306,48 +360,68 @@ pub const Journal = struct {
             return error.UnbalancedTransaction;
         }
     }
+};
 
-    // === PRIVATE HELPER FUNCTIONS ===
+// === PRIVATE HELPER FUNCTIONS ===
 
-    fn isValidAccountName(name: []const u8) bool {
-        if (name.len == 0) {
-            return false;
-        }
+fn isValidAccountName(name: []const u8) bool {
+    if (name.len == 0) {
+        return false;
+    }
 
-        var at_component_start = true;
-        for (name) |char| {
-            if (char == ':') {
-                if (at_component_start) {
-                    return false;
-                }
-
-                at_component_start = true;
-                continue;
-            }
-
+    var at_component_start = true;
+    for (name) |char| {
+        if (char == ':') {
             if (at_component_start) {
-                if (char < 'a' or char > 'z') {
-                    return false;
-                }
-
-                at_component_start = false;
-                continue;
-            }
-
-            const valid =
-                (char >= 'a' and char <= 'z') or
-                (char >= '0' and char <= '9') or
-                char == '-' or
-                char == '_';
-
-            if (!valid) {
                 return false;
             }
+
+            at_component_start = true;
+            continue;
         }
 
-        return !at_component_start;
+        if (at_component_start) {
+            if (char < 'a' or char > 'z') {
+                return false;
+            }
+
+            at_component_start = false;
+            continue;
+        }
+
+        const valid =
+            (char >= 'a' and char <= 'z') or
+            (char >= '0' and char <= '9') or
+            char == '-' or
+            char == '_';
+
+        if (!valid) {
+            return false;
+        }
     }
-};
+
+    return !at_component_start;
+}
+
+fn isValidTag(tag: []const u8) bool {
+    if (tag.len == 0 or tag[0] < 'a' or tag[0] > 'z') {
+        return false;
+    }
+
+    for (tag[1..]) |char| {
+        const valid =
+            (char >= 'a' and char <= 'z') or
+            (char >= '0' and char <= '9') or
+            char == '-' or
+            char == '_';
+
+        if (!valid) {
+            return false;
+        }
+    }
+
+    return true;
+}
 
 test "construct basic journal" {
     var journal = try Journal.init(
