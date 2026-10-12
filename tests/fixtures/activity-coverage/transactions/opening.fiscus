@@ -1,0 +1,32 @@
+meta version 1
+meta journal "activity-coverage"
+
+transaction 2026-01-01 "Opening NZD everyday balance" id opening-bank-nzd {
+    debit  asset:bank:nzd:everyday 5000.00 NZD
+    credit equity:opening-balances 5000.00 NZD
+}
+
+transaction 2026-01-01 "Opening NZD savings balance" id opening-savings-nzd {
+    debit  asset:bank:nzd:savings  2000.00 NZD
+    credit equity:opening-balances 2000.00 NZD
+}
+
+transaction 2026-01-01 "Opening AUD balance" id opening-bank-aud {
+    debit  asset:bank:aud:everyday 1000.00 AUD
+    credit equity:opening-balances 1000.00 AUD
+}
+
+transaction 2026-01-01 "Opening cash balance" id opening-cash-nzd {
+    debit  asset:cash:nzd          100.00 NZD
+    credit equity:opening-balances 100.00 NZD
+}
+
+transaction 2026-01-01 "Opening credit card balance" id opening-credit-card {
+    debit  equity:opening-balances   250.00 NZD
+    credit liability:credit-card:nzd 250.00 NZD
+}
+
+transaction 2026-01-01 "Opening loan balance" id opening-loan {
+    debit  equity:opening-balances 10000.00 NZD
+    credit liability:loan:nzd     10000.00 NZD
+}

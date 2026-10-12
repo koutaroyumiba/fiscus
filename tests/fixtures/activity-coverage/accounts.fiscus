@@ -1,0 +1,25 @@
+meta version 1
+meta journal "activity-coverage"
+
+account asset:bank:nzd:everyday
+account asset:bank:nzd:savings
+account asset:bank:aud:everyday
+account asset:cash:nzd
+account asset:receivable:shared
+
+account liability:credit-card:nzd
+account liability:loan:nzd
+
+account equity:opening-balances
+
+account income:salary
+account income:interest
+account income:dividend
+
+account expense:food:groceries
+account expense:household
+account expense:transport
+account expense:bank-fees
+account expense:gifts
+account expense:tax
+account expense:loan-interest

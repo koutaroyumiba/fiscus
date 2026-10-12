@@ -1,0 +1,5 @@
+meta version 1
+meta journal "activity-coverage"
+
+source accounts "accounts.fiscus"
+source transactions "transactions"

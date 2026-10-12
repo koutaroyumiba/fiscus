@@ -1,0 +1,13 @@
+meta version 1
+meta journal "activity-coverage"
+
+transaction 2026-01-24 "Shared groceries" id shared-groceries-2026-01 {
+    debit  expense:food:groceries   60.00 NZD
+    debit  asset:receivable:shared  40.00 NZD
+    credit asset:bank:nzd:everyday 100.00 NZD
+}
+
+transaction 2026-01-26 "Shared expense reimbursement" id shared-reimbursement-2026-01 {
+    debit  asset:bank:nzd:everyday 40.00 NZD
+    credit asset:receivable:shared 40.00 NZD
+}

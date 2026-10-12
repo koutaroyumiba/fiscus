@@ -1,0 +1,18 @@
+meta version 1
+meta journal "activity-coverage"
+
+transaction 2026-01-23 "Credit card groceries" id card-groceries-2026-01-23 {
+    debit  expense:food:groceries    75.00 NZD
+    credit liability:credit-card:nzd 75.00 NZD
+}
+
+transaction 2026-01-25 "Credit card repayment" id card-payment-2026-01 {
+    debit  liability:credit-card:nzd 75.00 NZD
+    credit asset:bank:nzd:everyday   75.00 NZD
+}
+
+transaction 2026-01-28 "Loan repayment" id loan-payment-2026-01 {
+    debit  liability:loan:nzd       400.00 NZD
+    debit  expense:loan-interest     50.00 NZD
+    credit asset:bank:nzd:everyday  450.00 NZD
+}

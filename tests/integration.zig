@@ -137,3 +137,55 @@ test "decode semantic multi-source workspace" {
     try std.testing.expectEqual(@as(usize, 2), journal.accounts.items.len);
     try std.testing.expectEqual(@as(usize, 1), journal.transactions.items.len);
 }
+
+test "load activity coverage workspace" {
+    var workspace = try fiscus.workspace.load(
+        std.testing.allocator,
+        std.testing.io,
+        std.Io.Dir.cwd(),
+        "tests/fixtures/activity-coverage/journal.fiscus",
+    );
+    defer workspace.deinit();
+
+    switch (workspace.result) {
+        .journal => |journal| {
+            try std.testing.expectEqualStrings("activity-coverage", journal.name);
+            try std.testing.expectEqual(@as(usize, 18), journal.accounts.items.len);
+            try std.testing.expectEqual(@as(usize, 23), journal.transactions.items.len);
+            try journal.validate();
+
+            var report = try fiscus.reports.calculateBalances(std.testing.allocator, &journal);
+            defer report.deinit();
+
+            try std.testing.expectEqual(@as(usize, 18), report.balances.items.len);
+            try expectBalance(&journal, &report, "asset:bank:nzd:everyday", "NZD", "6390.00");
+            try expectBalance(&journal, &report, "asset:bank:nzd:savings", "NZD", "2500.00");
+            try expectBalance(&journal, &report, "asset:bank:aud:everyday", "AUD", "1000.00");
+            try expectBalance(&journal, &report, "asset:cash:nzd", "NZD", "170.00");
+            try expectBalance(&journal, &report, "liability:credit-card:nzd", "NZD", "250.00");
+            try expectBalance(&journal, &report, "liability:loan:nzd", "NZD", "9600.00");
+            try expectBalance(&journal, &report, "expense:food:groceries", "NZD", "315.00");
+        },
+        .failure => return error.UnexpectedFailure,
+    }
+}
+
+fn expectBalance(
+    journal: *const fiscus.accounting.Journal,
+    report: *const fiscus.reports.BalanceReport,
+    account_name: []const u8,
+    commodity_symbol: []const u8,
+    expected_text: []const u8,
+) !void {
+    const account_id = journal.findAccount(account_name) orelse return error.AccountNotFound;
+    const expected = try journal.catalog.parseAmount(expected_text, commodity_symbol);
+
+    for (report.balances.items) |balance| {
+        if (balance.account == account_id and balance.amount.commodity == expected.commodity) {
+            try std.testing.expectEqual(expected.value, balance.amount.value);
+            return;
+        }
+    }
+
+    return error.BalanceNotFound;
+}
