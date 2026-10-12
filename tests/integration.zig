@@ -154,6 +154,12 @@ test "load activity coverage workspace" {
             try std.testing.expectEqual(@as(usize, 23), journal.transactions.items.len);
             try journal.validate();
 
+            const air_id = journal.catalog.find("NZX.AIR") orelse return error.ExpectedCommodity;
+            const air = journal.catalog.get(air_id).?;
+            try std.testing.expectEqual(fiscus.commodity.Kind.security, air.kind);
+            try std.testing.expectEqual(@as(u8, 6), air.scale);
+            try std.testing.expectEqualStrings("Air New Zealand", air.name.?);
+
             var report = try fiscus.reports.calculateBalances(std.testing.allocator, &journal);
             defer report.deinit();
 

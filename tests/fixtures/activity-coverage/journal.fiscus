@@ -1,5 +1,6 @@
 meta version 1
 meta journal "activity-coverage"
 
+source commodities "commodities.fiscus"
 source accounts "accounts.fiscus"
 source transactions "transactions"

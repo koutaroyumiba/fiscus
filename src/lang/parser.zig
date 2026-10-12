@@ -143,7 +143,9 @@ pub const Parser = struct {
         }
 
         const role: ast.SourceRole =
-            if (std.mem.eql(u8, current.lexeme, "accounts"))
+            if (std.mem.eql(u8, current.lexeme, "commodities"))
+                .commodities
+            else if (std.mem.eql(u8, current.lexeme, "accounts"))
                 .accounts
             else if (std.mem.eql(u8, current.lexeme, "transactions"))
                 .transactions
@@ -465,6 +467,7 @@ test "parse typed source directives" {
         \\meta version 1
         \\meta journal "personal"
         \\
+        \\source commodities "commodities.fiscus"
         \\source accounts "accounts.fiscus"
         \\source transactions "transactions"
     );
@@ -472,10 +475,12 @@ test "parse typed source directives" {
     var document = try parser.parse(std.testing.allocator);
     defer document.deinit(std.testing.allocator);
 
-    try std.testing.expectEqual(@as(usize, 2), document.sources.items.len);
-    try std.testing.expectEqual(ast.SourceRole.accounts, document.sources.items[0].role);
-    try std.testing.expectEqualStrings("accounts.fiscus", document.sources.items[0].path.lexeme);
-    try std.testing.expectEqual(ast.SourceRole.transactions, document.sources.items[1].role);
+    try std.testing.expectEqual(@as(usize, 3), document.sources.items.len);
+    try std.testing.expectEqual(ast.SourceRole.commodities, document.sources.items[0].role);
+    try std.testing.expectEqualStrings("commodities.fiscus", document.sources.items[0].path.lexeme);
+    try std.testing.expectEqual(ast.SourceRole.accounts, document.sources.items[1].role);
+    try std.testing.expectEqualStrings("accounts.fiscus", document.sources.items[1].path.lexeme);
+    try std.testing.expectEqual(ast.SourceRole.transactions, document.sources.items[2].role);
 }
 
 test "parse commodity declarations" {

@@ -6,9 +6,9 @@ Fiscus uses double-entry accounting with exact, commodity-aware amounts.
 
 An amount is a scaled integer paired with an internal commodity ID. Floating-point arithmetic is not used.
 
-The current built-in commodities are AUD, NZD, and USD, each with scale 2. A journal may contain multiple currencies, and an account may hold a separate balance in each currency. Every individual transaction must currently balance in one currency.
+The built-in commodities are AUD, NZD, and USD, each with scale 2. Journals may declare additional currencies, securities, and custom units with an exact scale and optional display name. A journal may contain multiple commodities, and an account may hold a separate balance in each.
 
-Custom commodities, securities, price annotations, and currency conversion are planned but are not implemented.
+Every individual transaction must currently balance in one commodity. Security quantities can therefore be represented, but purchases involving both security units and cash require the planned price and cost model. Price annotations, currency conversion, cost basis, and gains are not yet implemented.
 
 ## Workspaces and sources
 
@@ -18,13 +18,14 @@ A journal may be stored in one file or composed from typed sources:
 meta version 1
 meta journal "personal"
 
+source commodities "commodities.fiscus"
 source accounts "accounts.fiscus"
 source transactions "transactions"
 ```
 
-Every source is a complete versioned `.fiscus` document with matching journal metadata. Account sources define the chart of accounts; transaction sources contain financial events. Directories are discovered recursively and loaded deterministically.
+Every source is a complete versioned `.fiscus` document with matching journal metadata. Commodity sources define units, account sources define the chart of accounts, and transaction sources contain financial events. Directories are discovered recursively and loaded deterministically.
 
-All account declarations are decoded before transactions, regardless of source order. This preserves global account validation while allowing transaction history to be split into manageable files.
+All commodity declarations are decoded before accounts, and all accounts are decoded before transactions, regardless of source order. This preserves global validation while allowing definitions and transaction history to be split into manageable files.
 
 ## Accounts
 

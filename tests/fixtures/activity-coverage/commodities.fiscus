@@ -1,0 +1,4 @@
+meta version 1
+meta journal "activity-coverage"
+
+commodity NZX.AIR security scale 6 "Air New Zealand"

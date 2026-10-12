@@ -3,6 +3,7 @@ const lexer = @import("lexer.zig");
 const source = @import("source.zig");
 
 pub const SourceRole = enum {
+    commodities,
     accounts,
     transactions,
 };

@@ -161,7 +161,13 @@ assets - liabilities = equity + income - expenses
 
 ## Commodity
 
-A commodity is the unit being measured. The current implementation provides AUD, NZD, and USD as built-in currency commodities.
+A commodity is the unit being measured. AUD, NZD, and USD are built-in currency commodities. Journals may declare additional currencies, securities, and custom units:
+
+```fiscus
+commodity NZX.AIR security scale 6 "Air New Zealand"
+```
+
+The symbol is the persistent identity used in postings. The optional display name is descriptive and does not need to be unique.
 
 An amount always includes a commodity:
 
@@ -208,4 +214,4 @@ The current `balance` report prints each non-zero account and commodity balance.
 
 ## Planned concepts
 
-Securities, custom commodities, unit prices, exchange rates, cost basis, and capital gains are not currently implemented. Their eventual syntax and accounting rules remain subject to change.
+Unit prices, exchange rates, multi-commodity transactions, cost basis, and capital gains are not currently implemented. Their eventual syntax and accounting rules remain subject to change.

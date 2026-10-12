@@ -62,11 +62,12 @@ Larger journals can keep accounts and transactions in separate sources:
 meta version 1
 meta journal "personal"
 
+source commodities "commodities.fiscus"
 source accounts "accounts.fiscus"
 source transactions "transactions"
 ```
 
-Transaction directories are searched recursively for `.fiscus` files. Every sourced file carries its own version and journal metadata. See [`examples/workspace/`](examples/workspace/) for a complete layout.
+Commodity, account, and transaction sources may be files or recursively searched directories of `.fiscus` files. Every sourced file carries its own version and journal metadata. See [`examples/workspace/`](examples/workspace/) for a complete layout.
 
 Account type is inferred from the first component of its name. Supported roots are:
 
@@ -84,8 +85,8 @@ See [`docs/language.md`](docs/language.md) for the implemented grammar and valid
 
 - Every transaction must balance in one commodity.
 - Currency conversion and exchange-rate annotations are not supported.
-- Securities and custom commodity declarations are not supported.
-- Only AUD, NZD, and USD are built in; a complete ISO 4217 catalog is planned.
+- Securities can be declared and counted exactly, but purchases, prices, cost basis, and gains are not yet supported.
+- AUD, NZD, and USD are built in; other currencies must currently be declared explicitly.
 - Strings do not support escapes or newlines.
 - Account lifecycle dates, typed external references, transaction links, and file editing are not supported.
 - The only report currently implemented is account balances.

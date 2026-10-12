@@ -42,9 +42,9 @@ This fixture records realistic personal activity using the current Fiscus langua
 |---|---|
 | NZD-to-AUD conversion | Multi-commodity valuation |
 | Foreign-currency card purchase | Original and settlement currency relationship |
-| Stock purchase | Security quantity and acquisition cost |
-| Stock sale | Quantity, proceeds and cost-basis data |
-| Non-cash stock dividend | Security commodity support |
+| Stock purchase | Cash-to-security valuation and acquisition cost |
+| Stock sale | Security-to-cash valuation, proceeds and cost-basis data |
+| Non-cash stock dividend | Valuation and income-recognition rules |
 | Market valuation | Price declarations |
 | Employee shares or options | Security and option model |
 | Statement balance assertion | Assertion syntax |

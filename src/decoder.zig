@@ -2,6 +2,7 @@ const std = @import("std");
 
 const accounting = @import("accounting.zig");
 const ast = @import("lang/ast.zig");
+const commodity = @import("commodity.zig");
 const source = @import("lang/source.zig");
 const time = @import("time.zig");
 
@@ -13,8 +14,15 @@ pub const FailureKind = enum {
     source_requires_workspace,
     journal_name_mismatch,
     nested_sources_not_allowed,
+    commodity_source_contains_other,
     account_source_contains_other,
     transaction_source_contains_other,
+
+    invalid_commodity_symbol,
+    invalid_commodity_name,
+    invalid_commodity_scale,
+    duplicate_commodity,
+    too_many_commodities,
 
     invalid_account_prefix,
     invalid_account_name,
@@ -87,10 +95,77 @@ pub const Decoder = struct {
             return self.fail(.source_requires_workspace, document.sources.items[0].span);
         }
 
+        try self.decodeCommodities(&journal, document.commodities.items);
         try self.decodeAccounts(&journal, document.accounts.items);
         try self.decodeTransactions(&journal, document.transactions.items);
 
         return journal;
+    }
+
+    pub fn decodeWorkspace(
+        self: *Self,
+        root: *const ast.Document,
+        sources: []const SourceDocument,
+    ) !accounting.Journal {
+        var journal = try self.createJournal(root);
+        errdefer journal.deinit();
+
+        for (sources) |source_document| {
+            try self.validateSource(&journal, source_document.document, source_document.role);
+        }
+
+        try self.decodeCommodities(&journal, root.commodities.items);
+        for (sources) |source_document| {
+            if (source_document.role == .commodities) {
+                try self.decodeCommodities(&journal, source_document.document.commodities.items);
+            }
+        }
+
+        try self.decodeAccounts(&journal, root.accounts.items);
+        for (sources) |source_document| {
+            if (source_document.role == .accounts) {
+                try self.decodeAccounts(&journal, source_document.document.accounts.items);
+            }
+        }
+
+        try self.decodeTransactions(&journal, root.transactions.items);
+        for (sources) |source_document| {
+            if (source_document.role == .transactions) {
+                try self.decodeTransactions(&journal, source_document.document.transactions.items);
+            }
+        }
+
+        return journal;
+    }
+
+    pub fn decodeCommodities(self: *Self, journal: *accounting.Journal, commodities: []const ast.CommodityStmt) !void {
+        for (commodities) |comm| {
+            const scale = std.fmt.parseInt(u8, comm.scale.lexeme, 10) catch {
+                return self.fail(.invalid_commodity_scale, comm.scale.span);
+            };
+            const kind: commodity.Kind = switch (comm.kind) {
+                .currency => .currency,
+                .security => .security,
+                .custom => .custom,
+            };
+            const name = if (comm.name) |token| token.lexeme else null;
+
+            _ = journal.catalog.add(.{
+                .symbol = comm.symbol.lexeme,
+                .kind = kind,
+                .scale = scale,
+                .name = name,
+            }) catch |err| {
+                return switch (err) {
+                    error.OutOfMemory => error.OutOfMemory,
+                    error.InvalidSymbol => self.fail(.invalid_commodity_symbol, comm.symbol.span),
+                    error.InvalidName => self.fail(.invalid_commodity_name, comm.name.?.span),
+                    error.InvalidScale => self.fail(.invalid_commodity_scale, comm.scale.span),
+                    error.DuplicateSymbol => self.fail(.duplicate_commodity, comm.symbol.span),
+                    error.TooManyCommodities => self.fail(.too_many_commodities, comm.span),
+                };
+            };
+        }
     }
 
     pub fn decodeAccounts(self: *Self, journal: *accounting.Journal, accounts: []const ast.AccountStmt) !void {
@@ -134,46 +209,31 @@ pub const Decoder = struct {
         }
 
         switch (role) {
+            .commodities => {
+                if (document.accounts.items.len != 0) {
+                    return self.fail(.commodity_source_contains_other, document.accounts.items[0].span);
+                }
+                if (document.transactions.items.len != 0) {
+                    return self.fail(.commodity_source_contains_other, document.transactions.items[0].span);
+                }
+            },
             .accounts => {
+                if (document.commodities.items.len != 0) {
+                    return self.fail(.account_source_contains_other, document.commodities.items[0].span);
+                }
                 if (document.transactions.items.len != 0) {
                     return self.fail(.account_source_contains_other, document.transactions.items[0].span);
                 }
             },
             .transactions => {
+                if (document.commodities.items.len != 0) {
+                    return self.fail(.transaction_source_contains_other, document.commodities.items[0].span);
+                }
                 if (document.accounts.items.len != 0) {
                     return self.fail(.transaction_source_contains_other, document.accounts.items[0].span);
                 }
             },
         }
-    }
-
-    pub fn decodeWorkspace(
-        self: *Self,
-        root: *const ast.Document,
-        sources: []const SourceDocument,
-    ) !accounting.Journal {
-        var journal = try self.createJournal(root);
-        errdefer journal.deinit();
-
-        for (sources) |source_document| {
-            try self.validateSource(&journal, source_document.document, source_document.role);
-        }
-
-        try self.decodeAccounts(&journal, root.accounts.items);
-        for (sources) |source_document| {
-            if (source_document.role == .accounts) {
-                try self.decodeAccounts(&journal, source_document.document.accounts.items);
-            }
-        }
-
-        try self.decodeTransactions(&journal, root.transactions.items);
-        for (sources) |source_document| {
-            if (source_document.role == .transactions) {
-                try self.decodeTransactions(&journal, source_document.document.transactions.items);
-            }
-        }
-
-        return journal;
     }
 
     fn fail(self: *Self, kind: FailureKind, span: source.Span) DecodeError {

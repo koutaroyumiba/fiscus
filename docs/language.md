@@ -9,8 +9,9 @@ A file contains, in order:
 1. Version metadata
 2. Journal-name metadata
 3. Zero or more source directives
-4. Zero or more account declarations
-5. Zero or more transactions
+4. Zero or more commodity declarations
+5. Zero or more account declarations
+6. Zero or more transactions
 
 ```text
 meta version 1
@@ -48,14 +49,16 @@ A root journal may compose additional files with typed source directives:
 meta version 1
 meta journal "personal"
 
+source commodities "commodities.fiscus"
 source accounts "accounts.fiscus"
 source transactions "transactions"
 ```
 
 A source path is resolved relative to the root journal. It may identify a single file or a directory.
 
-- An `accounts` source may contain account declarations but not transactions.
-- A `transactions` source may contain transactions but not account declarations.
+- A `commodities` source may contain commodity declarations only.
+- An `accounts` source may contain account declarations only.
+- A `transactions` source may contain transactions only.
 - Only the root journal may contain source directives.
 - Every sourced file must declare the same journal name as the root.
 - Every sourced file has its own supported format version.
@@ -67,6 +70,7 @@ For example:
 ```text
 personal/
 ├── journal.fiscus
+├── commodities.fiscus
 ├── accounts.fiscus
 └── transactions/
     └── 2026/
@@ -74,7 +78,7 @@ personal/
         └── 02.fiscus
 ```
 
-Account declarations from the root and all account sources are collected before any transactions are resolved. Source directive order therefore does not control account visibility.
+Commodity declarations are collected first, followed by account declarations and then transactions. Source directive order therefore does not control commodity or account visibility.
 
 Single-file journals remain valid and do not require source directives.
 
@@ -178,23 +182,33 @@ A posting contains:
 1. `debit` or `credit`;
 2. a declared account name;
 3. a positive decimal amount;
-4. a built-in commodity code.
+4. a built-in or declared commodity symbol.
 
 Posting amounts cannot use signs, commas, or scientific notation. Zero amounts are rejected.
 
 ## Commodities and precision
 
-The currently supported commodities are:
+AUD, NZD, and USD are built in with scale 2. Journals may declare additional currencies, securities, and custom units:
 
-| Code | Scale |
-|---|---:|
-| AUD | 2 |
-| NZD | 2 |
-| USD | 2 |
+```fiscus
+commodity NZX.AIR security scale 6 "Air New Zealand"
+commodity BTC custom scale 8 "Bitcoin"
+commodity JPY currency scale 0 "Japanese yen"
+```
 
-Scale is the number of fractional decimal places. For example, `10.25 AUD` is stored exactly as 1,025 atomic units.
+The declaration grammar is:
 
-A journal may use multiple commodities, and an account may have a separate balance in each. Every individual transaction must currently use and balance in exactly one commodity.
+```text
+commodity SYMBOL KIND scale INTEGER [DISPLAY_NAME]
+```
+
+`KIND` is `currency`, `security`, or `custom`. Scale is the number of fractional decimal places and must be between 0 and 18. For example, `10.25 AUD` is stored exactly as 1,025 atomic units.
+
+A symbol starts with an uppercase ASCII letter. Remaining characters may be uppercase letters, digits, `.`, `_`, or `-`, with a maximum length of 32 bytes. Symbols must be unique and cannot redeclare a built-in commodity.
+
+The optional display name is a non-empty quoted string. It is descriptive only: postings use the symbol, and display names do not need to be unique.
+
+A journal may use multiple commodities, and an account may have a separate balance in each. Every individual transaction must currently use and balance in exactly one commodity. Declaring a security therefore supports exact security quantities, but a purchase involving both security units and cash still requires the planned multi-commodity valuation model.
 
 ## Validation
 
@@ -202,6 +216,9 @@ A valid journal requires:
 
 - format version 1;
 - a non-empty journal name;
+- syntactically valid, unique commodities;
+- commodity scales from 0 through 18;
+- non-empty optional commodity display names;
 - syntactically valid, unique accounts;
 - valid calendar dates;
 - declared posting accounts;
@@ -228,7 +245,6 @@ Journal names, transaction narrations, and transaction notes are surrounded by d
 
 The following concepts are planned but are not part of version 1 as currently implemented:
 
-- custom commodity and security declarations;
 - price and exchange-rate annotations;
 - typed external references and transaction links;
 - account opening and closing dates.
