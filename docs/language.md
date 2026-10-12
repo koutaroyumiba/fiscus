@@ -8,14 +8,16 @@ A file contains, in order:
 
 1. Version metadata
 2. Journal-name metadata
-3. Zero or more account declarations
-4. Zero or more transactions
+3. Zero or more source directives
+4. Zero or more account declarations
+5. Zero or more transactions
 
 ```text
 meta version 1
 meta journal "personal"
 
 account asset:bank
+account equity:opening-balances
 
 transaction 2026-01-01 "Opening balance" {
     debit  asset:bank               1000.00 AUD
@@ -35,6 +37,46 @@ meta journal "personal"
 ```
 
 Only format version `1` is supported. Journal names are quoted strings and cannot be empty.
+
+Every file in a workspace carries its own metadata. This lets Fiscus identify the syntax version of historical files independently and prevents files from another journal being included accidentally.
+
+## Sources
+
+A root journal may compose additional files with typed source directives:
+
+```fiscus
+meta version 1
+meta journal "personal"
+
+source accounts "accounts.fiscus"
+source transactions "transactions"
+```
+
+A source path is resolved relative to the root journal. It may identify a single file or a directory.
+
+- An `accounts` source may contain account declarations but not transactions.
+- A `transactions` source may contain transactions but not account declarations.
+- Only the root journal may contain source directives.
+- Every sourced file must declare the same journal name as the root.
+- Every sourced file has its own supported format version.
+
+Source directories are searched recursively. Fiscus loads regular files ending in `.fiscus` in lexical path order. Hidden files, hidden directories, non-`.fiscus` files, and symbolic links are ignored.
+
+For example:
+
+```text
+personal/
+├── journal.fiscus
+├── accounts.fiscus
+└── transactions/
+    └── 2026/
+        ├── 01.fiscus
+        └── 02.fiscus
+```
+
+Account declarations from the root and all account sources are collected before any transactions are resolved. Source directive order therefore does not control account visibility.
+
+Single-file journals remain valid and do not require source directives.
 
 ## Accounts
 
@@ -126,7 +168,10 @@ A valid journal requires:
 - positive posting amounts;
 - at least two postings per transaction;
 - equal debit and credit totals in one commodity;
-- unique explicit transaction IDs.
+- unique explicit transaction IDs;
+- matching journal names across a workspace;
+- role-appropriate contents in sourced files;
+- source directives only in the root journal.
 
 All amount arithmetic is checked for integer overflow.
 
@@ -141,5 +186,4 @@ The following concepts are planned but are not part of version 1 as currently im
 - custom commodity and security declarations;
 - price and exchange-rate annotations;
 - transaction metadata and tags;
-- account opening and closing dates;
-- includes or imports.
+- account opening and closing dates.

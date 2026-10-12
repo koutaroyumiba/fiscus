@@ -1,0 +1,7 @@
+# Example of a workspace (multi-file) fiscus journal
+
+meta version 1
+meta journal "workspace-example"
+
+source accounts "accounts.fiscus"
+source transactions "transactions"

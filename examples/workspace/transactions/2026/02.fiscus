@@ -1,0 +1,7 @@
+meta version 1
+meta journal "workspace-example"
+
+transaction 2026-02-03 "Groceries" {
+  debit expense:food:groceries 82.40 AUD
+  credit asset:bank 82.40 AUD
+}

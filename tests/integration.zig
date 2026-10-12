@@ -82,3 +82,58 @@ test "reject unbalanced fixture" {
         .journal => return error.ExpectedFailure,
     }
 }
+
+test "decode semantic multi-source workspace" {
+    const root_text =
+        \\meta version 1
+        \\meta journal "personal"
+        \\
+        \\source accounts "accounts.fiscus"
+        \\source transactions "transactions.fiscus"
+    ;
+
+    const accounts_text =
+        \\meta version 1
+        \\meta journal "personal"
+        \\
+        \\account asset:bank
+        \\account equity:opening-balances
+    ;
+
+    const transactions_text =
+        \\meta version 1
+        \\meta journal "personal"
+        \\
+        \\transaction 2026-01-01 "opening balance" {
+        \\  debit asset:bank 1000.00 AUD
+        \\  credit equity:opening-balances 1000.00 AUD
+        \\}
+    ;
+
+    var root_parser = fiscus.lang.parser.Parser.initWithSource(0, root_text);
+    var root = try root_parser.parse(std.testing.allocator);
+    defer root.deinit(std.testing.allocator);
+
+    var accounts_parser = fiscus.lang.parser.Parser.initWithSource(1, accounts_text);
+    var accounts = try accounts_parser.parse(std.testing.allocator);
+    defer accounts.deinit(std.testing.allocator);
+
+    var transactions_parser = fiscus.lang.parser.Parser.initWithSource(2, transactions_text);
+    var transactions = try transactions_parser.parse(std.testing.allocator);
+    defer transactions.deinit(std.testing.allocator);
+
+    const source_documents = [_]fiscus.decoder.SourceDocument{ .{
+        .role = .accounts,
+        .document = &accounts,
+    }, .{
+        .role = .transactions,
+        .document = &transactions,
+    } };
+
+    var decoder = fiscus.decoder.Decoder.init(std.testing.allocator);
+    var journal = try decoder.decodeWorkspace(&root, &source_documents);
+    defer journal.deinit();
+
+    try std.testing.expectEqual(@as(usize, 2), journal.accounts.items.len);
+    try std.testing.expectEqual(@as(usize, 1), journal.transactions.items.len);
+}

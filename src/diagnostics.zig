@@ -72,6 +72,12 @@ pub fn fromDecoderFailure(failure: decoder.Failure) Diagnostic {
             .unsupported_version => "unsupported journal version",
             .empty_journal_name => "journal name cannot be empty",
 
+            .source_requires_workspace => "journal sources require workspace loading",
+            .journal_name_mismatch => "source belongs to a different journal",
+            .nested_sources_not_allowed => "only the root journal may declare sources",
+            .account_source_contains_other => "account source cannot contain other statements",
+            .transaction_source_contains_other => "transaction source cannot contain other statements",
+
             .invalid_account_prefix => "invalid account type prefix",
             .invalid_account_name => "invalid account name",
             .duplicate_account => "account is declared more than once",

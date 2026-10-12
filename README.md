@@ -30,6 +30,8 @@ fis balance examples/personal.fiscus
 
 ## Journal format (proposed - still experimental)
 
+Fiscus supports both single-file journals and multi-file workspaces.
+
 ```fiscus
 meta version 1
 meta journal "personal"
@@ -50,6 +52,18 @@ transaction 2026-01-15 "Salary" id salary-2026-01 {
 }
 ```
 
+Larger journals can keep accounts and transactions in separate sources:
+
+```fiscus
+meta version 1
+meta journal "personal"
+
+source accounts "accounts.fiscus"
+source transactions "transactions"
+```
+
+Transaction directories are searched recursively for `.fiscus` files. Every sourced file carries its own version and journal metadata. See [`examples/workspace/`](examples/workspace/) for a complete layout.
+
 Account type is inferred from the first component of its name. Supported roots are:
 
 - `asset`
@@ -69,7 +83,7 @@ See [`docs/language.md`](docs/language.md) for the implemented grammar and valid
 - Securities and custom commodity declarations are not supported.
 - Only AUD, NZD, and USD are built in; a complete ISO 4217 catalog is planned.
 - Strings do not support escapes or newlines.
-- Includes, account lifecycle dates, transaction metadata, and file editing are not supported.
+- Account lifecycle dates, transaction metadata, and file editing are not supported.
 - The only report currently implemented is account balances.
 
 ## Project structure
@@ -85,11 +99,13 @@ src/
     accounting.zig      journal domain model and validation
     reports.zig         derived account balances
 
-    loader.zig          source-to-journal pipeline
+    loader.zig          single-source loading pipeline
+    workspace.zig       multi-file workspace loading
+    source_manager.zig  source ownership and identity
     decoder.zig         AST-to-journal conversion
     diagnostics.zig     source diagnostic rendering
 
-    lang/               .fiscus DSL things :D
+    lang/               .fiscus language implementation
         source.zig
         lexer.zig
         ast.zig

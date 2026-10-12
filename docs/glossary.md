@@ -4,12 +4,21 @@ Fiscus is based on double-entry accounting. Every financial event is represented
 
 ## Journal
 
-A journal is the complete collection of account declarations and transactions in a `.fiscus` file.
+A journal is the complete collection of account declarations and transactions. It may live in one `.fiscus` file or in a workspace composed from several versioned source files.
 
 ```fiscus
 meta version 1
 meta journal "personal"
 ```
+
+A larger journal can identify separate account and transaction sources:
+
+```fiscus
+source accounts "accounts.fiscus"
+source transactions "transactions"
+```
+
+All files in the workspace use the same journal name.
 
 ## Account
 

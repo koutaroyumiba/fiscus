@@ -1,0 +1,7 @@
+meta version 1
+meta journal "workspace-example"
+
+account asset:bank
+account equity:opening-balances
+account income:salary
+account expense:food:groceries

@@ -10,6 +10,12 @@ pub const FailureKind = enum {
     unsupported_version,
     empty_journal_name,
 
+    source_requires_workspace,
+    journal_name_mismatch,
+    nested_sources_not_allowed,
+    account_source_contains_other,
+    transaction_source_contains_other,
+
     invalid_account_prefix,
     invalid_account_name,
     duplicate_account,
@@ -36,6 +42,11 @@ pub const Failure = struct {
     span: source.Span,
 };
 
+pub const SourceDocument = struct {
+    role: ast.SourceRole,
+    document: *const ast.Document,
+};
+
 pub const DecodeError = error{
     InvalidDocument,
 };
@@ -53,24 +64,34 @@ pub const Decoder = struct {
         };
     }
 
-    pub fn decode(self: *Self, document: *const ast.Document) !accounting.Journal {
+    pub fn createJournal(self: *Self, document: *const ast.Document) !accounting.Journal {
         self.failure = null;
 
-        const version = try self.parseVersion(document);
+        const version = try self.decodeVersion(document);
         if (document.journal_name.lexeme.len == 0) {
             return self.fail(.empty_journal_name, document.journal_name.span);
         }
 
-        var journal = try accounting.Journal.init(
-            self.allocator,
-            version,
-            document.journal_name.lexeme,
-        );
+        return accounting.Journal.init(self.allocator, version, document.journal_name.lexeme);
+    }
+
+    pub fn decode(self: *Self, document: *const ast.Document) !accounting.Journal {
+        var journal = try self.createJournal(document);
         errdefer journal.deinit();
 
-        for (document.accounts.items) |account| {
-            _ = try self.inferAccountType(account);
+        if (document.sources.items.len != 0) {
+            return self.fail(.source_requires_workspace, document.sources.items[0].span);
+        }
 
+        try self.decodeAccounts(&journal, document.accounts.items);
+        try self.decodeTransactions(&journal, document.transactions.items);
+
+        return journal;
+    }
+
+    pub fn decodeAccounts(self: *Self, journal: *accounting.Journal, accounts: []const ast.AccountStmt) !void {
+        for (accounts) |account| {
+            _ = try self.inferAccountType(account);
             _ = journal.addAccount(account.name.lexeme) catch |err| {
                 return switch (err) {
                     error.OutOfMemory => error.OutOfMemory,
@@ -80,9 +101,72 @@ pub const Decoder = struct {
                 };
             };
         }
+    }
 
-        for (document.transactions.items) |transaction| {
-            try self.decodeTransaction(&journal, transaction);
+    pub fn decodeTransactions(
+        self: *Self,
+        journal: *accounting.Journal,
+        transactions: []const ast.TransactionStmt,
+    ) !void {
+        for (transactions) |transaction| {
+            try self.decodeTransaction(journal, transaction);
+        }
+    }
+
+    pub fn validateSource(
+        self: *Self,
+        journal: *const accounting.Journal,
+        document: *const ast.Document,
+        role: ast.SourceRole,
+    ) !void {
+        _ = try self.decodeVersion(document);
+
+        if (!std.mem.eql(u8, journal.name, document.journal_name.lexeme)) {
+            return self.fail(.journal_name_mismatch, document.journal_name.span);
+        }
+
+        if (document.sources.items.len != 0) {
+            return self.fail(.nested_sources_not_allowed, document.sources.items[0].span);
+        }
+
+        switch (role) {
+            .accounts => {
+                if (document.transactions.items.len != 0) {
+                    return self.fail(.account_source_contains_other, document.transactions.items[0].span);
+                }
+            },
+            .transactions => {
+                if (document.accounts.items.len != 0) {
+                    return self.fail(.transaction_source_contains_other, document.accounts.items[0].span);
+                }
+            },
+        }
+    }
+
+    pub fn decodeWorkspace(
+        self: *Self,
+        root: *const ast.Document,
+        sources: []const SourceDocument,
+    ) !accounting.Journal {
+        var journal = try self.createJournal(root);
+        errdefer journal.deinit();
+
+        for (sources) |source_document| {
+            try self.validateSource(&journal, source_document.document, source_document.role);
+        }
+
+        try self.decodeAccounts(&journal, root.accounts.items);
+        for (sources) |source_document| {
+            if (source_document.role == .accounts) {
+                try self.decodeAccounts(&journal, source_document.document.accounts.items);
+            }
+        }
+
+        try self.decodeTransactions(&journal, root.transactions.items);
+        for (sources) |source_document| {
+            if (source_document.role == .transactions) {
+                try self.decodeTransactions(&journal, source_document.document.transactions.items);
+            }
         }
 
         return journal;
@@ -97,7 +181,7 @@ pub const Decoder = struct {
         return error.InvalidDocument;
     }
 
-    fn parseVersion(self: *Self, document: *const ast.Document) DecodeError!u32 {
+    fn decodeVersion(self: *Self, document: *const ast.Document) DecodeError!u32 {
         const version = std.fmt.parseInt(u32, document.version.lexeme, 10) catch {
             return self.fail(.invalid_version, document.version.span);
         };

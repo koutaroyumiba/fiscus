@@ -10,6 +10,22 @@ The current built-in commodities are AUD, NZD, and USD, each with scale 2. A jou
 
 Custom commodities, securities, price annotations, and currency conversion are planned but are not implemented.
 
+## Workspaces and sources
+
+A journal may be stored in one file or composed from typed sources:
+
+```fiscus
+meta version 1
+meta journal "personal"
+
+source accounts "accounts.fiscus"
+source transactions "transactions"
+```
+
+Every source is a complete versioned `.fiscus` document with matching journal metadata. Account sources define the chart of accounts; transaction sources contain financial events. Directories are discovered recursively and loaded deterministically.
+
+All account declarations are decoded before transactions, regardless of source order. This preserves global account validation while allowing transaction history to be split into manageable files.
+
 ## Accounts
 
 An account's type is inferred from the first component of its name:

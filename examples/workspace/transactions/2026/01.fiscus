@@ -1,0 +1,12 @@
+meta version 1
+meta journal "workspace-example"
+
+transaction 2026-01-01 "Opening balance" {
+  debit asset:bank 1000.00 AUD
+  credit equity:opening-balances 1000.00 AUD
+}
+
+transaction 2026-01-15 "January salary" {
+  debit asset:bank 3000.00 AUD
+  credit income:salary 3000.00 AUD
+}

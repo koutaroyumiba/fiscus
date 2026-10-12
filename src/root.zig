@@ -7,6 +7,7 @@ pub const loader = @import("loader.zig");
 pub const reports = @import("reports.zig");
 pub const source_manager = @import("source_manager.zig");
 pub const time = @import("time.zig");
+pub const workspace = @import("workspace.zig");
 
 test {
     _ = accounting;
@@ -18,4 +19,5 @@ test {
     _ = reports;
     _ = source_manager;
     _ = time;
+    _ = workspace;
 }
