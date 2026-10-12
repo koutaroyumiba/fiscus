@@ -26,6 +26,18 @@ pub const BalanceReport = struct {
     }
 };
 
+pub const PrefixBalanceReport = struct {
+    allocator: std.mem.Allocator,
+    amounts: std.ArrayList(commodity.Amount),
+    balances: std.ArrayList(Balance),
+
+    pub fn deinit(self: *PrefixBalanceReport) void {
+        self.balances.deinit(self.allocator);
+        self.amounts.deinit(self.allocator);
+        self.* = undefined;
+    }
+};
+
 pub fn calculateBalances(
     allocator: std.mem.Allocator,
     journal: *const accounting.Journal,
@@ -85,6 +97,65 @@ pub fn calculateBalances(
     return .{ .allocator = allocator, .balances = balances };
 }
 
+pub fn calculatePrefixBalances(
+    allocator: std.mem.Allocator,
+    journal: *const accounting.Journal,
+    prefix: []const u8,
+) (std.mem.Allocator.Error || ReportError || error{InvalidAccountPrefix})!PrefixBalanceReport {
+    if (!accounting.isValidAccountPrefix(prefix)) {
+        return error.InvalidAccountPrefix;
+    }
+
+    var amounts: std.ArrayList(commodity.Amount) = .empty;
+    errdefer amounts.deinit(allocator);
+
+    var balances: std.ArrayList(Balance) = .empty;
+    errdefer balances.deinit(allocator);
+
+    var indices = std.AutoHashMap(commodity.CommodityId, usize).init(allocator);
+    defer indices.deinit();
+
+    var all_balances = try calculateBalances(allocator, journal);
+    defer all_balances.deinit();
+
+    for (all_balances.balances.items) |balance| {
+        const account = journal.getAccount(balance.account).?;
+        if (!accounting.matchesAccountPrefix(account.name, prefix)) {
+            continue;
+        }
+
+        try balances.append(allocator, balance);
+
+        const result = try indices.getOrPut(balance.amount.commodity);
+        const amount_index = if (result.found_existing)
+            result.value_ptr.*
+        else index: {
+            const new_index = amounts.items.len;
+            try amounts.append(allocator, .{
+                .value = 0,
+                .commodity = balance.amount.commodity,
+            });
+            result.value_ptr.* = new_index;
+            break :index new_index;
+        };
+
+        amounts.items[amount_index].value = std.math.add(
+            i64,
+            amounts.items[amount_index].value,
+            balance.amount.value,
+        ) catch return error.Overflow;
+    }
+
+    std.mem.sort(commodity.Amount, amounts.items, {}, lessThanAmount);
+    std.mem.sort(Balance, balances.items, journal, lessThanPrefixBalance);
+
+    return .{
+        .allocator = allocator,
+        .amounts = amounts,
+        .balances = balances,
+    };
+}
+
 pub fn writeBalances(writer: *std.Io.Writer, journal: *const accounting.Journal, report: *const BalanceReport) !void {
     for (report.balances.items) |balance| {
         const account = journal.getAccount(balance.account).?;
@@ -92,6 +163,35 @@ pub fn writeBalances(writer: *std.Io.Writer, journal: *const accounting.Journal,
         try writer.print("{s:<45} ", .{account.name});
         try journal.catalog.writeAmount(writer, balance.amount);
         try writer.writeByte('\n');
+    }
+}
+
+pub fn writePrefixBalances(
+    writer: *std.Io.Writer,
+    journal: *const accounting.Journal,
+    prefix: []const u8,
+    report: *const PrefixBalanceReport,
+) !void {
+    for (report.amounts.items, 0..) |amount, amount_index| {
+        if (amount_index != 0) {
+            try writer.writeByte('\n');
+        }
+
+        try writer.print("{s:<45} ", .{prefix});
+        try journal.catalog.writeAmount(writer, amount);
+        try writer.writeByte('\n');
+        try writer.writeAll("------------------------------------------------------------\n");
+
+        for (report.balances.items) |balance| {
+            if (balance.amount.commodity != amount.commodity) {
+                continue;
+            }
+
+            const account = journal.getAccount(balance.account).?;
+            try writer.print("  {s:<43} ", .{account.name});
+            try journal.catalog.writeAmount(writer, balance.amount);
+            try writer.writeByte('\n');
+        }
     }
 }
 
@@ -116,6 +216,24 @@ fn lessThanBalance(_: void, left: Balance, right: Balance) bool {
     }
 
     return left.amount.commodity < right.amount.commodity;
+}
+
+fn lessThanAmount(_: void, left: commodity.Amount, right: commodity.Amount) bool {
+    return left.commodity < right.commodity;
+}
+
+fn lessThanPrefixBalance(
+    journal: *const accounting.Journal,
+    left: Balance,
+    right: Balance,
+) bool {
+    if (left.amount.commodity != right.amount.commodity) {
+        return left.amount.commodity < right.amount.commodity;
+    }
+
+    const left_name = journal.getAccount(left.account).?.name;
+    const right_name = journal.getAccount(right.account).?.name;
+    return std.mem.lessThan(u8, left_name, right_name);
 }
 
 test "calculate natural accounting balances" {
@@ -159,6 +277,70 @@ test "calculate natural accounting balances" {
         \\equity:opening-balances                       1000.00 AUD
         \\
     , output.written());
+}
+
+test "aggregate balances by component-aware account prefix" {
+    var journal = try accounting.Journal.init(std.testing.allocator, 1, "prefixes");
+    defer journal.deinit();
+
+    const checking = try journal.addAccount("asset:bank:checking");
+    const savings = try journal.addAccount("asset:bank:savings");
+    const banking = try journal.addAccount("asset:banking");
+    const opening = try journal.addAccount("equity:opening-balances");
+    const aud = try journal.catalog.parseAmount("100.00", "AUD");
+    const usd = try journal.catalog.parseAmount("25.00", "USD");
+
+    const entries = [_]struct { account: accounting.AccountId, amount: commodity.Amount }{
+        .{ .account = checking, .amount = aud },
+        .{ .account = savings, .amount = aud },
+        .{ .account = checking, .amount = usd },
+        .{ .account = banking, .amount = aud },
+    };
+
+    for (entries, 0..) |entry, index| {
+        const transaction = try journal.addTransaction(.{
+            .date = try time.Date.init(2026, .jan, @intCast(index + 1)),
+        });
+        try journal.addPosting(transaction, .{
+            .direction = .debit,
+            .account = entry.account,
+            .amount = entry.amount,
+        });
+        try journal.addPosting(transaction, .{
+            .direction = .credit,
+            .account = opening,
+            .amount = entry.amount,
+        });
+    }
+
+    var report = try calculatePrefixBalances(std.testing.allocator, &journal, "asset:bank");
+    defer report.deinit();
+
+    try std.testing.expectEqual(@as(usize, 2), report.amounts.items.len);
+    try std.testing.expectEqual(@as(usize, 3), report.balances.items.len);
+    try std.testing.expectEqual(@as(i64, 20_000), report.amounts.items[0].value);
+    try std.testing.expectEqual(@as(i64, 2_500), report.amounts.items[1].value);
+
+    var output = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer output.deinit();
+    try writePrefixBalances(&output.writer, &journal, "asset:bank", &report);
+
+    try std.testing.expectEqualStrings(
+        \\asset:bank                                    200.00 AUD
+        \\------------------------------------------------------------
+        \\  asset:bank:checking                         100.00 AUD
+        \\  asset:bank:savings                          100.00 AUD
+        \\
+        \\asset:bank                                    25.00 USD
+        \\------------------------------------------------------------
+        \\  asset:bank:checking                         25.00 USD
+        \\
+    , output.written());
+
+    try std.testing.expectError(
+        error.InvalidAccountPrefix,
+        calculatePrefixBalances(std.testing.allocator, &journal, "asset:Bank"),
+    );
 }
 
 test "report separate balances per commodity" {

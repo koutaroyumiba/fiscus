@@ -417,6 +417,25 @@ pub const Journal = struct {
     }
 };
 
+pub fn isValidAccountPrefix(prefix: []const u8) bool {
+    if (!isValidAccountName(prefix)) {
+        return false;
+    }
+
+    const root_end = std.mem.indexOfScalar(u8, prefix, ':') orelse prefix.len;
+    return std.meta.stringToEnum(AccountType, prefix[0..root_end]) != null;
+}
+
+pub fn matchesAccountPrefix(name: []const u8, prefix: []const u8) bool {
+    if (std.mem.eql(u8, name, prefix)) {
+        return true;
+    }
+
+    return name.len > prefix.len and
+        std.mem.startsWith(u8, name, prefix) and
+        name[prefix.len] == ':';
+}
+
 // === PRIVATE HELPER FUNCTIONS ===
 
 fn isValidAccountName(name: []const u8) bool {
@@ -476,6 +495,18 @@ fn isValidTag(tag: []const u8) bool {
     }
 
     return true;
+}
+
+test "match account prefixes by component" {
+    try std.testing.expect(isValidAccountPrefix("asset"));
+    try std.testing.expect(isValidAccountPrefix("asset:bank"));
+    try std.testing.expect(!isValidAccountPrefix("assets:bank"));
+    try std.testing.expect(!isValidAccountPrefix("asset:Bank"));
+
+    try std.testing.expect(matchesAccountPrefix("asset:bank", "asset:bank"));
+    try std.testing.expect(matchesAccountPrefix("asset:bank:checking", "asset:bank"));
+    try std.testing.expect(!matchesAccountPrefix("asset:banking", "asset:bank"));
+    try std.testing.expect(!matchesAccountPrefix("liability:bank", "asset:bank"));
 }
 
 test "construct basic journal" {
