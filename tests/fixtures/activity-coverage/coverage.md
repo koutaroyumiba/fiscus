@@ -18,6 +18,7 @@ This fixture records realistic personal activity using the current Fiscus langua
 | Cash withdrawal | `cash-withdrawal-2026-01-14` |
 | Cash spending | `transport-2026-01-16` |
 | Same-currency transfer | `transfer-savings-2026-01` |
+| NZD-to-AUD conversion with fee | `currency-conversion-2026-02-01` |
 | Bank fee | `bank-fee-2026-01` |
 | Gift or donation | `gift-2026-01-21` |
 | Tax payment | `tax-2026-01-22` |
@@ -35,15 +36,13 @@ This fixture records realistic personal activity using the current Fiscus langua
 | Cash dividend | Cash and dividend income | Related security holding |
 | Refund | Accounting reversal, note and tag | Explicit link to original purchase |
 | Reimbursement | Receivable settlement, note and tags | Explicit link to original expense |
+| Stock purchase | Quantity, total consideration and separate fee | Tax-lot and jurisdiction-specific cost-basis rules |
 
 ## Not faithfully representable
 
 | Activity | Missing capability |
 |---|---|
-| NZD-to-AUD conversion | Multi-commodity valuation |
-| Foreign-currency card purchase | Original and settlement currency relationship |
-| Stock purchase | Cash-to-security valuation and acquisition cost |
-| Stock sale | Security-to-cash valuation, proceeds and cost-basis data |
+| Stock sale | Security-to-cash valuation and proceeds are available, but tax-lot selection and cost basis are missing |
 | Non-cash stock dividend | Valuation and income-recognition rules |
 | Market valuation | Price declarations |
 | Employee shares or options | Security and option model |
@@ -53,17 +52,18 @@ This fixture records realistic personal activity using the current Fiscus langua
 
 The workspace contains:
 
-- 18 accounts
-- 23 transactions
+- 21 accounts
+- 25 transactions
 
 Selected final natural balances:
 
 | Account | Balance |
 |---|---:|
-| `asset:bank:nzd:everyday` | `6390.00 NZD` |
+| `asset:bank:nzd:everyday` | `6281.20 NZD` |
 | `asset:bank:nzd:savings` | `2500.00 NZD` |
-| `asset:bank:aud:everyday` | `1000.00 AUD` |
+| `asset:bank:aud:everyday` | `1089.00 AUD` |
 | `asset:cash:nzd` | `170.00 NZD` |
+| `asset:broker:nzx:shares` | `10.000000 NZX.AIR` |
 | `asset:receivable:shared` | `0.00 NZD` |
 | `liability:credit-card:nzd` | `250.00 NZD` |
 | `liability:loan:nzd` | `9600.00 NZD` |
@@ -77,6 +77,8 @@ Selected final natural balances:
 | `expense:gifts` | `50.00 NZD` |
 | `expense:tax` | `200.00 NZD` |
 | `expense:loan-interest` | `50.00 NZD` |
+| `expense:broker-fees` | `1.00 NZD` |
+| `expense:currency-fees` | `1.00 AUD` |
 
 ## Current recording policy
 
@@ -86,4 +88,5 @@ Selected final natural balances:
 - Give every transaction a stable ID.
 - Use notes for additional human-readable context.
 - Use tags for classifications that cut across the account hierarchy.
-- Do not approximate currency conversions or investment activity using incomplete entries.
+- Use `@@` total valuations for exact currency conversions and security consideration.
+- Keep fees as explicit postings rather than hiding them in an exchange rate or security quantity.

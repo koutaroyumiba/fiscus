@@ -1,0 +1,12 @@
+meta version 1
+meta journal "activity-coverage"
+
+transaction 2026-02-02 "Buy Air New Zealand shares" {
+    id buy-air-2026-02-02
+    note "Example stock purchase with a separate broker fee"
+    tag investment
+
+    debit  asset:broker:nzx:shares 10.000000 NZX.AIR @@ 7.80 NZD
+    debit  expense:broker-fees                       1.00 NZD
+    credit asset:bank:nzd:everyday                   8.80 NZD
+}

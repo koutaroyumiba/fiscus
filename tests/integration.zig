@@ -272,8 +272,8 @@ test "load activity coverage workspace" {
     switch (workspace.result) {
         .journal => |journal| {
             try std.testing.expectEqualStrings("activity-coverage", journal.name);
-            try std.testing.expectEqual(@as(usize, 18), journal.accounts.items.len);
-            try std.testing.expectEqual(@as(usize, 23), journal.transactions.items.len);
+            try std.testing.expectEqual(@as(usize, 21), journal.accounts.items.len);
+            try std.testing.expectEqual(@as(usize, 25), journal.transactions.items.len);
             try journal.validate();
 
             const air_id = journal.catalog.find("NZX.AIR") orelse return error.ExpectedCommodity;
@@ -285,14 +285,17 @@ test "load activity coverage workspace" {
             var report = try fiscus.reports.calculateBalances(std.testing.allocator, &journal);
             defer report.deinit();
 
-            try std.testing.expectEqual(@as(usize, 18), report.balances.items.len);
-            try expectBalance(&journal, &report, "asset:bank:nzd:everyday", "NZD", "6390.00");
+            try std.testing.expectEqual(@as(usize, 21), report.balances.items.len);
+            try expectBalance(&journal, &report, "asset:bank:nzd:everyday", "NZD", "6281.20");
             try expectBalance(&journal, &report, "asset:bank:nzd:savings", "NZD", "2500.00");
-            try expectBalance(&journal, &report, "asset:bank:aud:everyday", "AUD", "1000.00");
+            try expectBalance(&journal, &report, "asset:bank:aud:everyday", "AUD", "1089.00");
             try expectBalance(&journal, &report, "asset:cash:nzd", "NZD", "170.00");
+            try expectBalance(&journal, &report, "asset:broker:nzx:shares", "NZX.AIR", "10.000000");
             try expectBalance(&journal, &report, "liability:credit-card:nzd", "NZD", "250.00");
             try expectBalance(&journal, &report, "liability:loan:nzd", "NZD", "9600.00");
             try expectBalance(&journal, &report, "expense:food:groceries", "NZD", "315.00");
+            try expectBalance(&journal, &report, "expense:broker-fees", "NZD", "1.00");
+            try expectBalance(&journal, &report, "expense:currency-fees", "AUD", "1.00");
         },
         .failure => return error.UnexpectedFailure,
     }

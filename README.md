@@ -83,9 +83,8 @@ See [`docs/language.md`](docs/language.md) for the implemented grammar and valid
 
 ## Current limitations
 
-- Every transaction must balance in one commodity.
-- Currency conversion and exchange-rate annotations are not supported.
-- Securities can be declared and counted exactly, but purchases, prices, cost basis, and gains are not yet supported.
+- Multi-commodity transactions require explicit exact `@@` total valuations in one balancing commodity.
+- Securities can be declared, counted, purchased, and sold, but market prices, tax lots, cost basis, and gains are not yet supported.
 - AUD, NZD, and USD are built in; other currencies must currently be declared explicitly.
 - Strings do not support escapes or newlines.
 - Account lifecycle dates, typed external references, transaction links, and file editing are not supported.

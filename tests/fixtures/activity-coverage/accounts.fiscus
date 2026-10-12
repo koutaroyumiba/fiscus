@@ -6,6 +6,7 @@ account asset:bank:nzd:savings
 account asset:bank:aud:everyday
 account asset:cash:nzd
 account asset:receivable:shared
+account asset:broker:nzx:shares
 
 account liability:credit-card:nzd
 account liability:loan:nzd
@@ -23,3 +24,5 @@ account expense:bank-fees
 account expense:gifts
 account expense:tax
 account expense:loan-interest
+account expense:broker-fees
+account expense:currency-fees

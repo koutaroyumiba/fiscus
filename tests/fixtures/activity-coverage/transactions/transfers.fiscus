@@ -6,3 +6,12 @@ transaction 2026-01-17 "Transfer to savings" {
     debit  asset:bank:nzd:savings  500.00 NZD
     credit asset:bank:nzd:everyday 500.00 NZD
 }
+
+transaction 2026-02-01 "Convert NZD to AUD" {
+    id currency-conversion-2026-02-01
+    tag currency-conversion
+
+    debit  asset:bank:aud:everyday  89.00 AUD
+    debit  expense:currency-fees    1.00 AUD
+    credit asset:bank:nzd:everyday 100.00 NZD @@ 90.00 AUD
+}

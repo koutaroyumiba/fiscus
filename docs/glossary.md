@@ -88,6 +88,14 @@ debit expense:food:groceries 82.40 AUD
 
 It has a direction, account, amount, and commodity. Posting amounts are positive; direction is expressed with `debit` or `credit`.
 
+A posting may carry an exact total valuation in another commodity:
+
+```fiscus
+debit asset:broker:nzx:shares 10.000000 NZX.AIR @@ 7.80 NZD
+```
+
+The account receives `10.000000 NZX.AIR`; `7.80 NZD` is used to balance that transaction. `@@` means total value rather than a per-unit price.
+
 ## Debit and credit
 
 Debit and credit are accounting directions, not synonyms for money entering or leaving.
@@ -214,4 +222,4 @@ The current `balance` report prints each non-zero account and commodity balance.
 
 ## Planned concepts
 
-Unit prices, exchange rates, multi-commodity transactions, cost basis, and capital gains are not currently implemented. Their eventual syntax and accounting rules remain subject to change.
+Unit prices, market-price history, tax lots, jurisdiction-specific cost basis, and capital gains are not currently implemented. Their eventual syntax and accounting rules remain subject to change.

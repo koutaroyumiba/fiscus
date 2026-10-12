@@ -8,7 +8,9 @@ An amount is a scaled integer paired with an internal commodity ID. Floating-poi
 
 The built-in commodities are AUD, NZD, and USD, each with scale 2. Journals may declare additional currencies, securities, and custom units with an exact scale and optional display name. A journal may contain multiple commodities, and an account may hold a separate balance in each.
 
-Every individual transaction must currently balance in one commodity. Security quantities can therefore be represented, but purchases involving both security units and cash require the planned price and cost model. Price annotations, currency conversion, cost basis, and gains are not yet implemented.
+Transactions may combine commodities using an exact `@@` total valuation. Native posting amounts determine account balances, while valuations translate selected postings into one balancing commodity for debit and credit validation. This supports currency conversion and basic security purchases without floating-point rates.
+
+A total valuation records transaction consideration, not a market price or final tax basis. Unit prices, market-price history, tax lots, jurisdiction-specific cost basis, and gains are not yet implemented.
 
 ## Workspaces and sources
 
@@ -64,7 +66,7 @@ A transaction records a dated event with two or more postings. Posting amounts a
 
 A transaction may also have an optional narration, stable ID, note, and machine-readable tags. The note preserves structured context, while tags classify properties that cut across the account hierarchy, such as `shared` or `reimbursable`. Ordinary counterparties may remain in the narration; parties with outstanding balances can be represented by receivable or payable accounts.
 
-For the current MVP, all postings in a transaction must use the same commodity and total debits must exactly equal total credits.
+For an ordinary transaction, native posting amounts share one commodity. In a multi-commodity transaction, `@@` annotations supply exact total values. Every posting's native amount or annotated value must resolve to one balancing commodity, and effective debit and credit totals must exactly match.
 
 ## Natural balances
 

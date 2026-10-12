@@ -186,6 +186,22 @@ A posting contains:
 
 Posting amounts cannot use signs, commas, or scientific notation. Zero amounts are rejected.
 
+A posting may include an exact total valuation:
+
+```fiscus
+debit asset:broker:nzx:shares 10.000000 NZX.AIR @@ 7.80 NZD
+```
+
+The posting grammar is:
+
+```text
+DIRECTION ACCOUNT AMOUNT COMMODITY [@@ TOTAL_AMOUNT TOTAL_COMMODITY]
+```
+
+`@@` records the total value of the native amount; it is not a per-unit price. The native amount changes the account balance, while the total valuation is used only to balance the transaction. Both amounts must be positive, and the valuation must use a different commodity from the native amount.
+
+For transaction validation, an unvalued posting contributes its native amount and a valued posting contributes its `@@` amount. All contributed amounts must use one balancing commodity, and their debit and credit totals must be equal. Plain `@` is reserved for a possible future unit-price annotation.
+
 ## Commodities and precision
 
 AUD, NZD, and USD are built in with scale 2. Journals may declare additional currencies, securities, and custom units:
@@ -208,7 +224,7 @@ A symbol starts with an uppercase ASCII letter. Remaining characters may be uppe
 
 The optional display name is a non-empty quoted string. It is descriptive only: postings use the symbol, and display names do not need to be unique.
 
-A journal may use multiple commodities, and an account may have a separate balance in each. Every individual transaction must currently use and balance in exactly one commodity. Declaring a security therefore supports exact security quantities, but a purchase involving both security units and cash still requires the planned multi-commodity valuation model.
+A journal may use multiple commodities, and an account may have a separate balance in each. A transaction may combine commodities when `@@` annotations give every posting one common balancing commodity. Account balances always retain native posting quantities rather than their transaction valuations.
 
 ## Validation
 
@@ -224,9 +240,10 @@ A valid journal requires:
 - declared posting accounts;
 - known commodities;
 - valid commodity precision;
-- positive posting amounts;
+- positive posting amounts and total valuations;
+- valuation commodities different from their native posting commodities;
 - at least two postings per transaction;
-- equal debit and credit totals in one commodity;
+- equal effective debit and credit totals in one balancing commodity;
 - unique explicit transaction IDs;
 - non-empty transaction notes;
 - syntactically valid, unique tags within each transaction;
@@ -245,6 +262,6 @@ Journal names, transaction narrations, and transaction notes are surrounded by d
 
 The following concepts are planned but are not part of version 1 as currently implemented:
 
-- price and exchange-rate annotations;
+- unit-price and market-price directives;
 - typed external references and transaction links;
 - account opening and closing dates.
