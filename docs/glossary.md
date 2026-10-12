@@ -50,13 +50,18 @@ transaction 2026-01-17 "Groceries" {
 }
 ```
 
-A transaction may have an explicit unique ID:
+A transaction may have an optional narration and an explicit unique ID. The ID appears in the body before any postings:
 
 ```fiscus
-transaction 2026-01-17 "Groceries" id groceries-001 {
+transaction 2026-01-17 "Groceries" {
+    id groceries-001
+
+    debit  expense:food:groceries 82.40 AUD
+    credit asset:bank             82.40 AUD
+}
 ```
 
-Transactions without an explicit ID are valid.
+Transactions without a narration or explicit ID are valid.
 
 ## Posting
 

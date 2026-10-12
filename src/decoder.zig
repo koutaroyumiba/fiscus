@@ -213,9 +213,14 @@ pub const Decoder = struct {
             return self.fail(.invalid_date, transaction.date.span);
         };
 
-        const external_id = if (transaction.external_id) |id| id.lexeme else null;
-        const transaction_index = journal.addTransaction(external_id, date, transaction.description.lexeme) catch |err| {
-            const id_span = if (transaction.external_id) |id| id.span else transaction.span;
+        const id = if (transaction.id) |token| token.lexeme else null;
+        const narration = if (transaction.narration) |token| token.lexeme else null;
+        const transaction_index = journal.addTransaction(.{
+            .date = date,
+            .id = id,
+            .narration = narration,
+        }) catch |err| {
+            const id_span = if (transaction.id) |token| token.span else transaction.span;
             return switch (err) {
                 error.OutOfMemory => error.OutOfMemory,
                 error.InvalidTransactionId => self.fail(.invalid_transaction_id, id_span),

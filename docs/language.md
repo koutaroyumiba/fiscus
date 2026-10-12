@@ -114,13 +114,27 @@ transaction 2026-01-17 "Groceries" {
 A transaction contains:
 
 - an ISO 8601 calendar date in `YYYY-MM-DD` form;
-- a quoted description;
+- an optional quoted narration;
 - at least two postings.
 
-An optional stable ID may follow the description:
+The narration may be omitted:
 
 ```fiscus
-transaction 2026-01-17 "Groceries" id groceries-001 {
+transaction 2026-01-17 {
+    debit  expense:food:groceries 82.40 AUD
+    credit asset:bank             82.40 AUD
+}
+```
+
+An optional stable ID may appear inside the transaction body before any postings:
+
+```fiscus
+transaction 2026-01-17 "Groceries" {
+    id groceries-001
+
+    debit  expense:food:groceries 82.40 AUD
+    credit asset:bank             82.40 AUD
+}
 ```
 
 Explicit transaction IDs must be non-empty and unique within the journal.
@@ -177,7 +191,7 @@ All amount arithmetic is checked for integer overflow.
 
 ## Strings
 
-Journal names and transaction descriptions are surrounded by double quotes. Escape sequences and multiline strings are not currently supported.
+Journal names and transaction narrations are surrounded by double quotes. Transaction narrations are optional. Escape sequences and multiline strings are not currently supported.
 
 ## Planned syntax
 

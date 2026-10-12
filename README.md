@@ -46,7 +46,9 @@ transaction 2026-01-01 "Opening balance" {
     credit equity:opening-balances 1000.00 AUD
 }
 
-transaction 2026-01-15 "Salary" id salary-2026-01 {
+transaction 2026-01-15 "Salary" {
+    id salary-2026-01
+
     debit  asset:bank    3000.00 AUD
     credit income:salary 3000.00 AUD
 }
@@ -72,7 +74,7 @@ Account type is inferred from the first component of its name. Supported roots a
 - `income`
 - `expense`
 
-Transaction IDs are optional. When supplied, they follow the description as `id <value>` and must be unique.
+Transaction narrations and IDs are optional. When supplied, an ID appears inside the transaction body before its postings and must be unique.
 
 See [`docs/language.md`](docs/language.md) for the implemented grammar and validation rules, and [`docs/glossary.md`](docs/glossary.md) for accounting terminology.
 

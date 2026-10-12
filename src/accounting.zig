@@ -27,10 +27,16 @@ pub const Posting = struct {
 };
 
 pub const Transaction = struct {
-    external_id: ?[]const u8,
+    id: ?[]const u8,
     date: time.Date,
-    description: []const u8,
+    narration: ?[]const u8,
     postings: std.ArrayList(Posting),
+};
+
+pub const NewTransaction = struct {
+    date: time.Date,
+    id: ?[]const u8 = null,
+    narration: ?[]const u8 = null,
 };
 
 pub const JournalError = error{
@@ -67,7 +73,7 @@ pub const Journal = struct {
     account_ids_by_name: std.StringHashMap(AccountId),
 
     transactions: std.ArrayList(Transaction),
-    transaction_indices_by_external_id: std.StringHashMap(TransactionIndex),
+    transaction_indices_by_id: std.StringHashMap(TransactionIndex),
 
     const Self = @This();
 
@@ -86,19 +92,21 @@ pub const Journal = struct {
             .accounts = .empty,
             .account_ids_by_name = std.StringHashMap(AccountId).init(allocator),
             .transactions = .empty,
-            .transaction_indices_by_external_id = std.StringHashMap(TransactionIndex).init(allocator),
+            .transaction_indices_by_id = std.StringHashMap(TransactionIndex).init(allocator),
         };
     }
 
     pub fn deinit(self: *Self) void {
-        self.transaction_indices_by_external_id.deinit();
+        self.transaction_indices_by_id.deinit();
 
         for (self.transactions.items) |*transaction| {
-            if (transaction.external_id) |external_id| {
-                self.allocator.free(external_id);
+            if (transaction.id) |id| {
+                self.allocator.free(id);
             }
 
-            self.allocator.free(transaction.description);
+            if (transaction.narration) |narration| {
+                self.allocator.free(narration);
+            }
             transaction.postings.deinit(self.allocator);
         }
 
@@ -164,13 +172,13 @@ pub const Journal = struct {
         return self.accounts.items[index];
     }
 
-    pub fn addTransaction(self: *Self, external_id: ?[]const u8, date: time.Date, description: []const u8) !TransactionIndex {
-        if (external_id) |id| {
+    pub fn addTransaction(self: *Self, new_transaction: NewTransaction) !TransactionIndex {
+        if (new_transaction.id) |id| {
             if (id.len == 0) {
                 return error.InvalidTransactionId;
             }
 
-            if (self.transaction_indices_by_external_id.contains(id)) {
+            if (self.transaction_indices_by_id.contains(id)) {
                 return error.DuplicateTransactionId;
             }
         }
@@ -180,32 +188,38 @@ pub const Journal = struct {
         }
 
         try self.transactions.ensureUnusedCapacity(self.allocator, 1);
-        if (external_id != null) {
-            try self.transaction_indices_by_external_id.ensureUnusedCapacity(1);
+        if (new_transaction.id != null) {
+            try self.transaction_indices_by_id.ensureUnusedCapacity(1);
         }
 
-        const owned_description = try self.allocator.dupe(u8, description);
-        errdefer self.allocator.free(owned_description);
-
-        var owned_external_id: ?[]u8 = null;
-        errdefer if (owned_external_id) |id| {
+        var owned_id: ?[]u8 = null;
+        errdefer if (owned_id) |id| {
             self.allocator.free(id);
         };
 
-        if (external_id) |id| {
-            owned_external_id = try self.allocator.dupe(u8, id);
+        if (new_transaction.id) |id| {
+            owned_id = try self.allocator.dupe(u8, id);
+        }
+
+        var owned_narration: ?[]u8 = null;
+        errdefer if (owned_narration) |narration| {
+            self.allocator.free(narration);
+        };
+
+        if (new_transaction.narration) |narration| {
+            owned_narration = try self.allocator.dupe(u8, narration);
         }
 
         const index: TransactionIndex = @intCast(self.transactions.items.len);
         self.transactions.appendAssumeCapacity(.{
-            .external_id = owned_external_id,
-            .date = date,
-            .description = owned_description,
+            .id = owned_id,
+            .date = new_transaction.date,
+            .narration = owned_narration,
             .postings = .empty,
         });
 
-        if (owned_external_id) |id| {
-            self.transaction_indices_by_external_id.putAssumeCapacityNoClobber(id, index);
+        if (owned_id) |id| {
+            self.transaction_indices_by_id.putAssumeCapacityNoClobber(id, index);
         }
 
         return index;
@@ -344,7 +358,7 @@ test "construct basic journal" {
     defer journal.deinit();
 
     const bank = try journal.addAccount("asset:bank");
-    const transaction = try journal.addTransaction(null, try time.Date.init(2026, .jan, 1), "Opening balance");
+    const transaction = try journal.addTransaction(.{ .date = try time.Date.init(2026, .jan, 1) });
     const amount = try journal.catalog.parseAmount("1000.00", "AUD");
 
     try journal.addPosting(transaction, .debit, bank, amount);
@@ -368,7 +382,7 @@ test "reject unbalanced transaction" {
     const bank = try journal.addAccount("asset:bank");
     const groceries = try journal.addAccount("expense:groceries");
 
-    const transaction = try journal.addTransaction(null, try time.Date.init(2026, .jan, 17), "Groceries");
+    const transaction = try journal.addTransaction(.{ .date = try time.Date.init(2026, .jan, 17), .narration = "Groceries" });
 
     try journal.addPosting(transaction, .debit, groceries, try journal.catalog.parseAmount("20.00", "AUD"));
     try journal.addPosting(transaction, .credit, bank, try journal.catalog.parseAmount("19.00", "AUD"));

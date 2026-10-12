@@ -125,7 +125,10 @@ test "calculate natural accounting balances" {
     const bank = try journal.addAccount("asset:bank");
     const opening = try journal.addAccount("equity:opening-balances");
 
-    const transaction = try journal.addTransaction(null, try time.Date.parse("2026-01-01"), "Opening balance");
+    const transaction = try journal.addTransaction(.{
+        .date = try time.Date.parse("2026-01-01"),
+        .narration = "Opening balance",
+    });
     const amount = try journal.catalog.parseAmount("1000.00", "AUD");
 
     try journal.addPosting(transaction, .debit, bank, amount);
@@ -157,13 +160,19 @@ test "report separate balances per commodity" {
     const cash = try journal.addAccount("asset:cash");
     const opening = try journal.addAccount("equity:opening-balances");
 
-    const aud_transaction = try journal.addTransaction(null, try time.Date.parse("2026-01-01"), "AUD opening balance");
+    const aud_transaction = try journal.addTransaction(.{
+        .date = try time.Date.parse("2026-01-01"),
+        .narration = "AUD opening balance",
+    });
     const aud = try journal.catalog.parseAmount("100.00", "AUD");
 
     try journal.addPosting(aud_transaction, .debit, cash, aud);
     try journal.addPosting(aud_transaction, .credit, opening, aud);
 
-    const usd_transaction = try journal.addTransaction(null, try time.Date.parse("2026-01-01"), "USD opening balance");
+    const usd_transaction = try journal.addTransaction(.{
+        .date = try time.Date.parse("2026-01-01"),
+        .narration = "USD opening balance",
+    });
     const usd = try journal.catalog.parseAmount("50.00", "USD");
 
     try journal.addPosting(usd_transaction, .debit, cash, usd);

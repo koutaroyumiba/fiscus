@@ -216,15 +216,19 @@ pub const Parser = struct {
     fn parseTransaction(self: *Self, allocator: std.mem.Allocator) !ast.TransactionStmt {
         const keyword = try self.expectWord("transaction");
         const date = try self.expectKind(.word);
-        const description = try self.expectKind(.string);
-
-        var external_id: ?lexer.Token = null;
-        if (self.matchesWord("id")) {
-            _ = try self.advance();
-            external_id = try self.expectKind(.word);
-        }
+        const narration: ?lexer.Token =
+            if (self.current.?.kind == .string)
+                try self.advance()
+            else
+                null;
 
         _ = try self.expectKind(.left_brace);
+
+        var id: ?lexer.Token = null;
+        if (self.matchesWord("id")) {
+            _ = try self.advance();
+            id = try self.expectKind(.word);
+        }
 
         var postings: std.ArrayList(ast.PostingStmt) = .empty;
         errdefer postings.deinit(allocator);
@@ -236,9 +240,9 @@ pub const Parser = struct {
 
         const closing_brace = try self.expectKind(.right_brace);
         return .{
-            .external_id = external_id,
+            .id = id,
             .date = date,
-            .description = description,
+            .narration = narration,
             .postings = postings,
             .span = .{
                 .source_id = keyword.span.source_id,
@@ -321,7 +325,8 @@ test "parse transaction and postings" {
         \\account asset:bank
         \\account expense:groceries
         \\
-        \\transaction 2026-01-17 "Groceries" id groceries-001 {
+        \\transaction 2026-01-17 "Groceries" {
+        \\  id groceries-001
         \\  debit expense:groceries 82.40 AUD
         \\  credit asset:bank 82.40 AUD
         \\}
@@ -335,8 +340,8 @@ test "parse transaction and postings" {
     const transaction = document.transactions.items[0];
 
     try std.testing.expectEqualStrings("2026-01-17", transaction.date.lexeme);
-    try std.testing.expectEqualStrings("Groceries", transaction.description.lexeme);
-    try std.testing.expectEqualStrings("groceries-001", transaction.external_id.?.lexeme);
+    try std.testing.expectEqualStrings("Groceries", transaction.narration.?.lexeme);
+    try std.testing.expectEqualStrings("groceries-001", transaction.id.?.lexeme);
     try std.testing.expectEqual(@as(usize, 2), transaction.postings.items.len);
     try std.testing.expectEqual(ast.Direction.debit, transaction.postings.items[0].direction);
     try std.testing.expectEqualStrings("82.40", transaction.postings.items[0].amount.lexeme);

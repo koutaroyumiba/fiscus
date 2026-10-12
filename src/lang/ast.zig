@@ -37,9 +37,9 @@ pub const PostingStmt = struct {
 };
 
 pub const TransactionStmt = struct {
-    external_id: ?lexer.Token,
+    id: ?lexer.Token,
     date: lexer.Token,
-    description: lexer.Token,
+    narration: ?lexer.Token,
     postings: std.ArrayList(PostingStmt),
     span: source.Span,
 };
