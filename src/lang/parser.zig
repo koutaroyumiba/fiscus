@@ -255,15 +255,35 @@ pub const Parser = struct {
         const amount = try self.expectKind(.word);
         const commodity = try self.expectKind(.word);
 
+        var valuation: ?ast.ValuationExpr = null;
+        if (self.matchesWord("@@")) {
+            const marker = try self.expectWord("@@");
+            const valuation_amount = try self.expectKind(.word);
+            const valuation_commodity = try self.expectKind(.word);
+
+            valuation = .{
+                .amount = valuation_amount,
+                .commodity = valuation_commodity,
+                .span = .{
+                    .source_id = marker.span.source_id,
+                    .start = marker.span.start,
+                    .end = valuation_commodity.span.end,
+                },
+            };
+        }
+
+        const posting_end = if (valuation) |value| value.span.end else commodity.span.end;
+
         return .{
             .direction = direction,
             .account = account,
             .amount = amount,
             .commodity = commodity,
+            .valuation = valuation,
             .span = .{
                 .source_id = direction_token.span.source_id,
                 .start = direction_token.span.start,
-                .end = commodity.span.end,
+                .end = posting_end,
             },
         };
     }
@@ -440,6 +460,69 @@ test "parse transaction and postings" {
     try std.testing.expectEqual(@as(usize, 2), transaction.postings.items.len);
     try std.testing.expectEqual(ast.Direction.debit, transaction.postings.items[0].direction);
     try std.testing.expectEqualStrings("82.40", transaction.postings.items[0].amount.lexeme);
+}
+
+test "parse total posting valuation" {
+    var parser = Parser.init(
+        \\meta version 1
+        \\meta journal "investments"
+        \\
+        \\account asset:broker:shares
+        \\account asset:bank
+        \\
+        \\transaction 2026-02-02 "Buy shares" {
+        \\  debit asset:broker:shares 10.000000 NZX.AIR @@ 7.80 NZD
+        \\  credit asset:bank 7.80 NZD
+        \\}
+    );
+
+    var document = try parser.parse(std.testing.allocator);
+    defer document.deinit(std.testing.allocator);
+
+    const transaction = document.transactions.items[0];
+    const valued_posting = transaction.postings.items[0];
+
+    try std.testing.expectEqualStrings("10.000000", valued_posting.amount.lexeme);
+    try std.testing.expectEqualStrings("NZX.AIR", valued_posting.commodity.lexeme);
+
+    const valuation = valued_posting.valuation.?;
+    try std.testing.expectEqualStrings("7.80", valuation.amount.lexeme);
+    try std.testing.expectEqualStrings("NZD", valuation.commodity.lexeme);
+    try std.testing.expect(transaction.postings.items[1].valuation == null);
+}
+
+test "reject malformed total posting valuations" {
+    const inputs = [_][]const u8{
+        \\meta version 1
+        \\meta journal "investments"
+        \\
+        \\transaction 2026-02-02 {
+        \\  debit asset:broker:shares 10.000000 NZX.AIR @@
+        \\}
+        ,
+        \\meta version 1
+        \\meta journal "investments"
+        \\
+        \\transaction 2026-02-02 {
+        \\  debit asset:broker:shares 10.000000 NZX.AIR @@ 7.80
+        \\}
+        ,
+        \\meta version 1
+        \\meta journal "investments"
+        \\
+        \\transaction 2026-02-02 {
+        \\  debit asset:broker:shares 10.000000 NZX.AIR @@ 7.80 NZD @@ 8.00 NZD
+        \\}
+        ,
+    };
+
+    for (inputs) |input| {
+        var parser = Parser.init(input);
+        try std.testing.expectError(
+            error.UnexpectedToken,
+            parser.parse(std.testing.allocator),
+        );
+    }
 }
 
 test "preserve lexer failure on first token" {

@@ -24,6 +24,14 @@ pub const Posting = struct {
     direction: Direction,
     account: AccountId,
     amount: commodity.Amount,
+    valuation: ?commodity.Amount,
+};
+
+pub const NewPosting = struct {
+    direction: Direction,
+    account: AccountId,
+    amount: commodity.Amount,
+    valuation: ?commodity.Amount = null,
 };
 
 pub const Transaction = struct {
@@ -54,6 +62,8 @@ pub const JournalError = error{
     UnknownCommodity,
     UnknownTransaction,
     InvalidPostingAmount,
+    InvalidPostingValuation,
+    RedundantPostingValuation,
     TooManyAccounts,
     TooManyTransactions,
 };
@@ -279,27 +289,46 @@ pub const Journal = struct {
         try transaction.tags.append(self.allocator, owned);
     }
 
-    pub fn addPosting(self: *Self, transaction_index: TransactionIndex, direction: Direction, account: AccountId, amount: commodity.Amount) !void {
+    pub fn addPosting(self: *Self, transaction_index: TransactionIndex, new_posting: NewPosting) !void {
         const index = std.math.cast(usize, transaction_index) orelse return error.UnknownTransaction;
         if (index >= self.transactions.items.len) {
             return error.UnknownTransaction;
         }
 
-        if (self.getAccount(account) == null) {
+        if (self.getAccount(new_posting.account) == null) {
             return error.UnknownAccount;
         }
 
-        if (self.catalog.get(amount.commodity) == null) {
+        if (self.catalog.get(new_posting.amount.commodity) == null) {
             return error.UnknownCommodity;
         }
 
-        if (amount.value <= 0) {
+        if (new_posting.amount.value <= 0) {
             return error.InvalidPostingAmount;
+        }
+
+        if (new_posting.valuation) |valuation| {
+            if (self.catalog.get(valuation.commodity) == null) {
+                return error.UnknownCommodity;
+            }
+
+            if (valuation.value <= 0) {
+                return error.InvalidPostingValuation;
+            }
+
+            if (valuation.commodity == new_posting.amount.commodity) {
+                return error.RedundantPostingValuation;
+            }
         }
 
         try self.transactions.items[index].postings.append(
             self.allocator,
-            .{ .direction = direction, .account = account, .amount = amount },
+            .{
+                .direction = new_posting.direction,
+                .account = new_posting.account,
+                .amount = new_posting.amount,
+                .valuation = new_posting.valuation,
+            },
         );
     }
 
@@ -328,13 +357,16 @@ pub const Journal = struct {
             return error.TooFewPostings;
         }
 
-        const expected_commodity = transaction.postings.items[0].amount.commodity;
+        const first = transaction.postings.items[0];
+        const first_effective = first.valuation orelse first.amount;
+        const expected_commodity = first_effective.commodity;
 
         var debit_total: i64 = 0;
         var credit_total: i64 = 0;
 
         for (transaction.postings.items) |posting| {
-            if (posting.amount.commodity != expected_commodity) {
+            const effective = posting.valuation orelse posting.amount;
+            if (effective.commodity != expected_commodity) {
                 return error.MultipleCommodities;
             }
 
@@ -343,14 +375,14 @@ pub const Journal = struct {
                     debit_total = std.math.add(
                         i64,
                         debit_total,
-                        posting.amount.value,
+                        effective.value,
                     ) catch return error.TransactionTotalOverflow;
                 },
                 .credit => {
                     credit_total = std.math.add(
                         i64,
                         credit_total,
-                        posting.amount.value,
+                        effective.value,
                     ) catch return error.TransactionTotalOverflow;
                 },
             }
@@ -435,7 +467,11 @@ test "construct basic journal" {
     const transaction = try journal.addTransaction(.{ .date = try time.Date.init(2026, .jan, 1) });
     const amount = try journal.catalog.parseAmount("1000.00", "AUD");
 
-    try journal.addPosting(transaction, .debit, bank, amount);
+    try journal.addPosting(transaction, .{
+        .direction = .debit,
+        .account = bank,
+        .amount = amount,
+    });
 
     try std.testing.expectEqual(@as(usize, 1), journal.accounts.items.len);
     try std.testing.expectEqual(AccountType.asset, journal.accounts.items[0].account_type);
@@ -445,7 +481,11 @@ test "construct basic journal" {
 
     const opening = try journal.addAccount("equity:opening-balances");
 
-    try journal.addPosting(transaction, .credit, opening, amount);
+    try journal.addPosting(transaction, .{
+        .direction = .credit,
+        .account = opening,
+        .amount = amount,
+    });
     try journal.validate();
 }
 
@@ -458,8 +498,175 @@ test "reject unbalanced transaction" {
 
     const transaction = try journal.addTransaction(.{ .date = try time.Date.init(2026, .jan, 17), .narration = "Groceries" });
 
-    try journal.addPosting(transaction, .debit, groceries, try journal.catalog.parseAmount("20.00", "AUD"));
-    try journal.addPosting(transaction, .credit, bank, try journal.catalog.parseAmount("19.00", "AUD"));
+    try journal.addPosting(transaction, .{
+        .direction = .debit,
+        .account = groceries,
+        .amount = try journal.catalog.parseAmount("20.00", "AUD"),
+    });
+    try journal.addPosting(transaction, .{
+        .direction = .credit,
+        .account = bank,
+        .amount = try journal.catalog.parseAmount("19.00", "AUD"),
+    });
 
     try std.testing.expectError(error.UnbalancedTransaction, journal.validate());
+}
+
+test "validate stock purchase using total valuation" {
+    var journal = try Journal.init(std.testing.allocator, 1, "investments");
+    defer journal.deinit();
+
+    _ = try journal.catalog.add(.{
+        .symbol = "NZX.AIR",
+        .kind = .security,
+        .scale = 6,
+    });
+
+    const shares = try journal.addAccount("asset:broker:shares");
+    const bank = try journal.addAccount("asset:bank");
+    const fees = try journal.addAccount("expense:broker-fees");
+    const transaction = try journal.addTransaction(.{
+        .date = try time.Date.parse("2026-02-02"),
+        .narration = "Buy shares",
+    });
+
+    const quantity = try journal.catalog.parseAmount("10.000000", "NZX.AIR");
+    const valuation = try journal.catalog.parseAmount("7.80", "NZD");
+
+    try journal.addPosting(transaction, .{
+        .direction = .debit,
+        .account = shares,
+        .amount = quantity,
+        .valuation = valuation,
+    });
+    try journal.addPosting(transaction, .{
+        .direction = .debit,
+        .account = fees,
+        .amount = try journal.catalog.parseAmount("1.00", "NZD"),
+    });
+    try journal.addPosting(transaction, .{
+        .direction = .credit,
+        .account = bank,
+        .amount = try journal.catalog.parseAmount("8.80", "NZD"),
+    });
+
+    try journal.validateTransaction(transaction);
+
+    const stored = journal.transactions.items[transaction].postings.items[0];
+    try std.testing.expect(stored.amount.eql(quantity));
+    try std.testing.expect(stored.valuation.?.eql(valuation));
+}
+
+test "validate currency conversion using total valuation" {
+    var journal = try Journal.init(std.testing.allocator, 1, "personal");
+    defer journal.deinit();
+
+    const aud_bank = try journal.addAccount("asset:bank:aud");
+    const nzd_bank = try journal.addAccount("asset:bank:nzd");
+    const fees = try journal.addAccount("expense:currency-fees");
+    const transaction = try journal.addTransaction(.{
+        .date = try time.Date.parse("2026-02-01"),
+    });
+
+    try journal.addPosting(transaction, .{
+        .direction = .debit,
+        .account = aud_bank,
+        .amount = try journal.catalog.parseAmount("89.00", "AUD"),
+    });
+    try journal.addPosting(transaction, .{
+        .direction = .debit,
+        .account = fees,
+        .amount = try journal.catalog.parseAmount("1.00", "AUD"),
+    });
+    try journal.addPosting(transaction, .{
+        .direction = .credit,
+        .account = nzd_bank,
+        .amount = try journal.catalog.parseAmount("100.00", "NZD"),
+        .valuation = try journal.catalog.parseAmount("90.00", "AUD"),
+    });
+
+    try journal.validateTransaction(transaction);
+}
+
+test "reject invalid and redundant posting valuations" {
+    var journal = try Journal.init(std.testing.allocator, 1, "investments");
+    defer journal.deinit();
+
+    _ = try journal.catalog.add(.{
+        .symbol = "NZX.AIR",
+        .kind = .security,
+        .scale = 6,
+    });
+
+    const shares = try journal.addAccount("asset:broker:shares");
+    const transaction = try journal.addTransaction(.{
+        .date = try time.Date.parse("2026-02-02"),
+    });
+    const quantity = try journal.catalog.parseAmount("10.000000", "NZX.AIR");
+    const nzd = journal.catalog.find("NZD").?;
+
+    try std.testing.expectError(
+        error.InvalidPostingValuation,
+        journal.addPosting(transaction, .{
+            .direction = .debit,
+            .account = shares,
+            .amount = quantity,
+            .valuation = .{ .value = 0, .commodity = nzd },
+        }),
+    );
+
+    try std.testing.expectError(
+        error.RedundantPostingValuation,
+        journal.addPosting(transaction, .{
+            .direction = .debit,
+            .account = shares,
+            .amount = quantity,
+            .valuation = try journal.catalog.parseAmount("7.000000", "NZX.AIR"),
+        }),
+    );
+}
+
+test "reject unvalued mixed commodities and unbalanced valuations" {
+    var journal = try Journal.init(std.testing.allocator, 1, "personal");
+    defer journal.deinit();
+
+    _ = try journal.catalog.add(.{
+        .symbol = "NZX.AIR",
+        .kind = .security,
+        .scale = 6,
+    });
+
+    const shares = try journal.addAccount("asset:broker:shares");
+    const bank = try journal.addAccount("asset:bank");
+
+    const mixed = try journal.addTransaction(.{
+        .date = try time.Date.parse("2026-02-01"),
+    });
+    try journal.addPosting(mixed, .{
+        .direction = .debit,
+        .account = bank,
+        .amount = try journal.catalog.parseAmount("90.00", "AUD"),
+    });
+    try journal.addPosting(mixed, .{
+        .direction = .credit,
+        .account = bank,
+        .amount = try journal.catalog.parseAmount("100.00", "NZD"),
+    });
+    try std.testing.expectError(error.MultipleCommodities, journal.validateTransaction(mixed));
+
+    const unbalanced = try journal.addTransaction(.{
+        .date = try time.Date.parse("2026-02-02"),
+    });
+    try journal.addPosting(unbalanced, .{
+        .direction = .debit,
+        .account = shares,
+        .amount = try journal.catalog.parseAmount("10.000000", "NZX.AIR"),
+        .valuation = try journal.catalog.parseAmount("7.80", "NZD"),
+    });
+    try journal.addPosting(unbalanced, .{
+        .direction = .credit,
+        .account = bank,
+        .amount = try journal.catalog.parseAmount("8.00", "NZD"),
+    });
+    try std.testing.expectError(error.UnbalancedTransaction, journal.validateTransaction(unbalanced));
 }

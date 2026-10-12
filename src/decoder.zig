@@ -40,8 +40,12 @@ pub const FailureKind = enum {
 
     unknown_account,
     unknown_commodity,
+    unknown_valuation_commodity,
     invalid_amount,
     invalid_posting_amount,
+    invalid_valuation_amount,
+    invalid_posting_valuation,
+    redundant_posting_valuation,
 
     too_few_postings,
     multiple_commodities,
@@ -355,6 +359,13 @@ pub const Decoder = struct {
         transaction_index: accounting.TransactionIndex,
         posting: ast.PostingStmt,
     ) !void {
+        // i dont really like this...
+        // TODO: need to implement a cleaner solution here
+        const direction: accounting.Direction = switch (posting.direction) {
+            .debit => .debit,
+            .credit => .credit,
+        };
+
         const account = journal.findAccount(posting.account.lexeme) orelse {
             return self.fail(.unknown_account, posting.account.span);
         };
@@ -369,17 +380,30 @@ pub const Decoder = struct {
             };
         };
 
-        // i dont really like this...
-        // TODO: need to implement a cleaner solution here
-        const direction: accounting.Direction = switch (posting.direction) {
-            .debit => .debit,
-            .credit => .credit,
-        };
+        const valuation: ?commodity.Amount = if (posting.valuation) |expression|
+            journal.catalog.parseAmount(expression.amount.lexeme, expression.commodity.lexeme) catch |err| {
+                return switch (err) {
+                    error.UnknownCommodity => self.fail(.unknown_valuation_commodity, expression.commodity.span),
+                    error.InvalidAmount,
+                    error.TooMuchPrecision,
+                    error.Overflow,
+                    => self.fail(.invalid_valuation_amount, expression.amount.span),
+                };
+            }
+        else
+            null;
 
-        journal.addPosting(transaction_index, direction, account, amount) catch |err| {
+        journal.addPosting(transaction_index, .{
+            .direction = direction,
+            .account = account,
+            .amount = amount,
+            .valuation = valuation,
+        }) catch |err| {
             return switch (err) {
                 error.OutOfMemory => error.OutOfMemory,
                 error.InvalidPostingAmount => self.fail(.invalid_posting_amount, posting.amount.span),
+                error.InvalidPostingValuation => self.fail(.invalid_posting_valuation, posting.valuation.?.span),
+                error.RedundantPostingValuation => self.fail(.redundant_posting_valuation, posting.valuation.?.span),
 
                 // we should have already checked for these
                 error.UnknownAccount,

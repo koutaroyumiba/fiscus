@@ -43,11 +43,18 @@ pub const AccountStmt = struct {
 
 pub const Direction = enum { debit, credit };
 
+pub const ValuationExpr = struct {
+    amount: lexer.Token,
+    commodity: lexer.Token,
+    span: source.Span,
+};
+
 pub const PostingStmt = struct {
     direction: Direction,
     account: lexer.Token,
     amount: lexer.Token,
     commodity: lexer.Token,
+    valuation: ?ValuationExpr,
     span: source.Span,
 };
 

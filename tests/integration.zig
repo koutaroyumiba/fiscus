@@ -138,6 +138,128 @@ test "decode semantic multi-source workspace" {
     try std.testing.expectEqual(@as(usize, 1), journal.transactions.items.len);
 }
 
+test "decode exact total posting valuation" {
+    const input =
+        \\meta version 1
+        \\meta journal "investments"
+        \\
+        \\commodity NZX.AIR security scale 6 "Air New Zealand"
+        \\
+        \\account asset:broker:shares
+        \\account asset:bank
+        \\account expense:broker-fees
+        \\
+        \\transaction 2026-02-02 "Buy shares" {
+        \\  debit asset:broker:shares 10.000000 NZX.AIR @@ 7.80 NZD
+        \\  debit expense:broker-fees 1.00 NZD
+        \\  credit asset:bank 8.80 NZD
+        \\}
+    ;
+
+    var result = try fiscus.loader.load(std.testing.allocator, input);
+    defer result.deinit();
+
+    switch (result) {
+        .journal => |journal| {
+            const posting = journal.transactions.items[0].postings.items[0];
+
+            try std.testing.expectEqualStrings(
+                "NZX.AIR",
+                journal.catalog.get(posting.amount.commodity).?.symbol,
+            );
+            try std.testing.expectEqual(@as(i64, 10_000_000), posting.amount.value);
+
+            const valuation = posting.valuation.?;
+            try std.testing.expectEqualStrings(
+                "NZD",
+                journal.catalog.get(valuation.commodity).?.symbol,
+            );
+            try std.testing.expectEqual(@as(i64, 780), valuation.value);
+
+            var report = try fiscus.reports.calculateBalances(std.testing.allocator, &journal);
+            defer report.deinit();
+
+            try expectBalance(&journal, &report, "asset:broker:shares", "NZX.AIR", "10.000000");
+            try expectBalance(&journal, &report, "expense:broker-fees", "NZD", "1.00");
+        },
+        .failure => return error.UnexpectedFailure,
+    }
+}
+
+test "report invalid total posting valuations" {
+    const Case = struct {
+        input: []const u8,
+        expected: fiscus.decoder.FailureKind,
+    };
+
+    const cases = [_]Case{
+        .{
+            .input =
+            \\meta version 1
+            \\meta journal "personal"
+            \\
+            \\account asset:bank
+            \\account equity:opening-balances
+            \\
+            \\transaction 2026-02-01 {
+            \\  debit asset:bank 100.00 AUD @@ 90.00 UNKNOWN
+            \\  credit equity:opening-balances 100.00 AUD
+            \\}
+            ,
+            .expected = .unknown_valuation_commodity,
+        },
+        .{
+            .input =
+            \\meta version 1
+            \\meta journal "personal"
+            \\
+            \\account asset:bank
+            \\account equity:opening-balances
+            \\
+            \\transaction 2026-02-01 {
+            \\  debit asset:bank 100.00 AUD @@ nope NZD
+            \\  credit equity:opening-balances 100.00 AUD
+            \\}
+            ,
+            .expected = .invalid_valuation_amount,
+        },
+        .{
+            .input =
+            \\meta version 1
+            \\meta journal "personal"
+            \\
+            \\account asset:bank
+            \\account equity:opening-balances
+            \\
+            \\transaction 2026-02-01 {
+            \\  debit asset:bank 100.00 AUD @@ 0.00 NZD
+            \\  credit equity:opening-balances 100.00 AUD
+            \\}
+            ,
+            .expected = .invalid_posting_valuation,
+        },
+        .{
+            .input =
+            \\meta version 1
+            \\meta journal "personal"
+            \\
+            \\account asset:bank
+            \\account equity:opening-balances
+            \\
+            \\transaction 2026-02-01 {
+            \\  debit asset:bank 100.00 AUD @@ 100.00 AUD
+            \\  credit equity:opening-balances 100.00 AUD
+            \\}
+            ,
+            .expected = .redundant_posting_valuation,
+        },
+    };
+
+    for (cases) |case| {
+        try expectDecoderFailure(case.input, case.expected);
+    }
+}
+
 test "load activity coverage workspace" {
     var workspace = try fiscus.workspace.load(
         std.testing.allocator,
@@ -173,6 +295,24 @@ test "load activity coverage workspace" {
             try expectBalance(&journal, &report, "expense:food:groceries", "NZD", "315.00");
         },
         .failure => return error.UnexpectedFailure,
+    }
+}
+
+fn expectDecoderFailure(
+    input: []const u8,
+    expected: fiscus.decoder.FailureKind,
+) !void {
+    var result = try fiscus.loader.load(std.testing.allocator, input);
+    defer result.deinit();
+
+    switch (result) {
+        .failure => |failure| switch (failure) {
+            .decoder => |decoder_failure| {
+                try std.testing.expectEqual(expected, decoder_failure.kind);
+            },
+            else => return error.UnexpectedFailureKind,
+        },
+        .journal => return error.ExpectedFailure,
     }
 }
 

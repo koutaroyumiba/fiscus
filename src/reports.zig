@@ -131,8 +131,16 @@ test "calculate natural accounting balances" {
     });
     const amount = try journal.catalog.parseAmount("1000.00", "AUD");
 
-    try journal.addPosting(transaction, .debit, bank, amount);
-    try journal.addPosting(transaction, .credit, opening, amount);
+    try journal.addPosting(transaction, .{
+        .direction = .debit,
+        .account = bank,
+        .amount = amount,
+    });
+    try journal.addPosting(transaction, .{
+        .direction = .credit,
+        .account = opening,
+        .amount = amount,
+    });
 
     var report = try calculateBalances(std.testing.allocator, &journal);
     defer report.deinit();
@@ -166,8 +174,16 @@ test "report separate balances per commodity" {
     });
     const aud = try journal.catalog.parseAmount("100.00", "AUD");
 
-    try journal.addPosting(aud_transaction, .debit, cash, aud);
-    try journal.addPosting(aud_transaction, .credit, opening, aud);
+    try journal.addPosting(aud_transaction, .{
+        .direction = .debit,
+        .account = cash,
+        .amount = aud,
+    });
+    try journal.addPosting(aud_transaction, .{
+        .direction = .credit,
+        .account = opening,
+        .amount = aud,
+    });
 
     const usd_transaction = try journal.addTransaction(.{
         .date = try time.Date.parse("2026-01-01"),
@@ -175,8 +191,16 @@ test "report separate balances per commodity" {
     });
     const usd = try journal.catalog.parseAmount("50.00", "USD");
 
-    try journal.addPosting(usd_transaction, .debit, cash, usd);
-    try journal.addPosting(usd_transaction, .credit, opening, usd);
+    try journal.addPosting(usd_transaction, .{
+        .direction = .debit,
+        .account = cash,
+        .amount = usd,
+    });
+    try journal.addPosting(usd_transaction, .{
+        .direction = .credit,
+        .account = opening,
+        .amount = usd,
+    });
 
     var report = try calculateBalances(std.testing.allocator, &journal);
     defer report.deinit();

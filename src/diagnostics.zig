@@ -101,11 +101,15 @@ pub fn fromDecoderFailure(failure: decoder.Failure) Diagnostic {
 
             .unknown_account => "posting references an unknown account",
             .unknown_commodity => "posting uses an unknown commodity",
+            .unknown_valuation_commodity => "posting valuation uses an unknown commodity",
             .invalid_amount => "invalid posting amount",
             .invalid_posting_amount => "posting amount must be greater than zero",
+            .invalid_valuation_amount => "invalid posting valuation amount",
+            .invalid_posting_valuation => "posting valuation must be greater than zero",
+            .redundant_posting_valuation => "posting valuation must use a different commodity",
 
             .too_few_postings => "transaction must contain at least two postings",
-            .multiple_commodities => "transaction contains multiple commodities",
+            .multiple_commodities => "transaction postings do not share one balancing commodity",
             .transaction_total_overflow => "transaction total is too large",
             .unbalanced_transaction => "transaction debits and credits do not balance",
         },
