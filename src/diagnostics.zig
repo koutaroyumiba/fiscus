@@ -128,6 +128,7 @@ pub fn fromParserFailure(failure: parser.Failure) Diagnostic {
             },
             .word => |word| expectedWordMessage(word),
             .source_role => "expected 'accounts' or 'transactions'",
+            .commodity_kind => "expected 'currency', 'security', or 'custom'",
         },
         .span = failure.token.span,
     };

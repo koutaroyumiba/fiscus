@@ -10,9 +10,16 @@ pub const Kind = enum {
 pub const CommodityId = u32;
 pub const Commodity = struct {
     symbol: []const u8,
+    name: ?[]const u8,
     kind: Kind,
     scale: u8,
-    quote: ?CommodityId,
+};
+
+pub const Definition = struct {
+    symbol: []const u8,
+    kind: Kind,
+    scale: u8,
+    name: ?[]const u8 = null,
 };
 
 /// value is the smallest representable unit
@@ -62,7 +69,7 @@ pub const CatalogError = error{
     DuplicateSymbol,
     InvalidSymbol,
     InvalidScale,
-    UnknownQuoteCommodity,
+    InvalidName,
     TooManyCommodities,
 };
 
@@ -94,29 +101,31 @@ pub const Catalog = struct {
 
         for (self.commodities.items) |commodity| {
             self.allocator.free(commodity.symbol);
+            if (commodity.name) |name| {
+                self.allocator.free(name);
+            }
         }
 
         self.commodities.deinit(self.allocator);
-        // cool syntax
         self.* = undefined;
     }
 
-    pub fn add(self: *Self, symbol: []const u8, kind: Kind, scale: u8, quote: ?CommodityId) !CommodityId {
-        if (!isValidSymbol(symbol)) {
+    pub fn add(self: *Self, definition: Definition) !CommodityId {
+        if (!isValidSymbol(definition.symbol)) {
             return error.InvalidSymbol;
         }
 
-        if (scale > 18) {
+        if (definition.scale > 18) {
             return error.InvalidScale;
         }
 
-        if (self.ids_by_symbol.contains(symbol)) {
+        if (self.ids_by_symbol.contains(definition.symbol)) {
             return error.DuplicateSymbol;
         }
 
-        if (quote) |quote_id| {
-            if (self.get(quote_id) == null) {
-                return error.UnknownQuoteCommodity;
+        if (definition.name) |name| {
+            if (name.len == 0) {
+                return error.InvalidName;
             }
         }
 
@@ -129,15 +138,22 @@ pub const Catalog = struct {
         try self.commodities.ensureUnusedCapacity(self.allocator, 1);
         try self.ids_by_symbol.ensureUnusedCapacity(1);
 
-        const owned_symbol = try self.allocator.dupe(u8, symbol);
+        const owned_symbol = try self.allocator.dupe(u8, definition.symbol);
         errdefer self.allocator.free(owned_symbol);
+        var owned_name: ?[]u8 = null;
+        errdefer if (owned_name) |name| {
+            self.allocator.free(name);
+        };
+        if (definition.name) |name| {
+            owned_name = try self.allocator.dupe(u8, name);
+        }
 
         const id: CommodityId = @intCast(self.commodities.items.len);
         self.commodities.appendAssumeCapacity(.{
             .symbol = owned_symbol,
-            .kind = kind,
-            .scale = scale,
-            .quote = quote,
+            .name = owned_name,
+            .kind = definition.kind,
+            .scale = definition.scale,
         });
 
         self.ids_by_symbol.putAssumeCapacityNoClobber(owned_symbol, id);
@@ -282,13 +298,13 @@ pub const Catalog = struct {
     }
 
     fn addBuiltin(self: *Self, symbol: []const u8, scale: u8) std.mem.Allocator.Error!void {
-        _ = self.add(symbol, .currency, scale, null) catch |err| switch (err) {
+        _ = self.add(.{ .symbol = symbol, .kind = .currency, .scale = scale }) catch |err| switch (err) {
             error.OutOfMemory => return error.OutOfMemory,
 
             error.InvalidSymbol,
             error.InvalidScale,
+            error.InvalidName,
             error.DuplicateSymbol,
-            error.UnknownQuoteCommodity,
             error.TooManyCommodities,
             => unreachable,
         };
@@ -400,4 +416,23 @@ test "format minimum integer amount" {
 
     try catalog.writeAmount(&output.writer, .{ .value = std.math.minInt(i64), .commodity = aud });
     try std.testing.expectEqualStrings("-92233720368547758.08 AUD", output.written());
+}
+
+test "add a custom named security" {
+    var catalog = try Catalog.init(std.testing.allocator);
+    defer catalog.deinit();
+
+    const id = try catalog.add(.{
+        .symbol = "NZX.AIR",
+        .kind = .security,
+        .scale = 6,
+        .name = "Air New Zealand",
+    });
+
+    const security = catalog.get(id).?;
+
+    try std.testing.expectEqualStrings("NZX.AIR", security.symbol);
+    try std.testing.expectEqualStrings("Air New Zealand", security.name.?);
+    try std.testing.expectEqual(Kind.security, security.kind);
+    try std.testing.expectEqual(@as(u8, 6), security.scale);
 }

@@ -9,6 +9,7 @@ pub const Expected = union(enum) {
     kind: lexer.TokenKind,
     word: []const u8,
     source_role: void,
+    commodity_kind: void,
 };
 
 pub const Failure = struct {
@@ -62,6 +63,11 @@ pub const Parser = struct {
         while (self.matchesWord("source")) {
             const source_statement = try self.parseSource();
             try document.sources.append(allocator, source_statement);
+        }
+
+        while (self.matchesWord("commodity")) {
+            const commodity = try self.parseCommodity();
+            try document.commodities.append(allocator, commodity);
         }
 
         while (self.matchesWord("account")) {
@@ -166,6 +172,52 @@ pub const Parser = struct {
                 .source_id = keyword.span.source_id,
                 .start = keyword.span.start,
                 .end = path.span.end,
+            },
+        };
+    }
+
+    fn parseCommodityKind(self: *Self) !ast.CommodityKind {
+        const current = self.current orelse return self.currentLexerError();
+
+        if (current.kind != .word) {
+            self.failure = .{ .token = current, .expected = .{ .commodity_kind = {} } };
+            return error.UnexpectedToken;
+        }
+
+        const kind = std.meta.stringToEnum(ast.CommodityKind, current.lexeme) orelse {
+            self.failure = .{ .token = current, .expected = .{ .commodity_kind = {} } };
+            return error.UnexpectedToken;
+        };
+
+        _ = try self.advance();
+        return kind;
+    }
+
+    fn parseCommodity(self: *Self) !ast.CommodityStmt {
+        const keyword = try self.expectWord("commodity");
+        const symbol = try self.expectKind(.word);
+        const kind = try self.parseCommodityKind();
+
+        _ = try self.expectWord("scale");
+        const scale = try self.expectKind(.word);
+
+        const name: ?lexer.Token =
+            if (self.current.?.kind == .string)
+                try self.advance()
+            else
+                null;
+
+        const end = if (name) |token| token.span.end else scale.span.end;
+
+        return .{
+            .symbol = symbol,
+            .kind = kind,
+            .scale = scale,
+            .name = name,
+            .span = .{
+                .source_id = keyword.span.source_id,
+                .start = keyword.span.start,
+                .end = end,
             },
         };
     }
@@ -424,4 +476,27 @@ test "parse typed source directives" {
     try std.testing.expectEqual(ast.SourceRole.accounts, document.sources.items[0].role);
     try std.testing.expectEqualStrings("accounts.fiscus", document.sources.items[0].path.lexeme);
     try std.testing.expectEqual(ast.SourceRole.transactions, document.sources.items[1].role);
+}
+
+test "parse commodity declarations" {
+    var parser = Parser.init(
+        \\meta version 1
+        \\meta journal "personal"
+        \\
+        \\commodity NZX.AIR security scale 6 "Air New Zealand"
+        \\commodity BTC custom scale 8
+        \\commodity JPY currency scale 0 "Japanese Yen"
+    );
+
+    var document = try parser.parse(std.testing.allocator);
+    defer document.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(usize, 3), document.commodities.items.len);
+
+    const security = document.commodities.items[0];
+    try std.testing.expectEqualStrings("NZX.AIR", security.symbol.lexeme);
+    try std.testing.expectEqual(ast.CommodityKind.security, security.kind);
+    try std.testing.expectEqualStrings("6", security.scale.lexeme);
+    try std.testing.expectEqualStrings("Air New Zealand", security.name.?.lexeme);
+    try std.testing.expect(document.commodities.items[1].name == null);
 }

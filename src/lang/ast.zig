@@ -13,6 +13,20 @@ pub const SourceStmt = struct {
     span: source.Span,
 };
 
+pub const CommodityKind = enum {
+    currency,
+    security,
+    custom,
+};
+
+pub const CommodityStmt = struct {
+    symbol: lexer.Token,
+    kind: CommodityKind,
+    scale: lexer.Token,
+    name: ?lexer.Token,
+    span: source.Span,
+};
+
 pub const AccountType = enum {
     asset,
     liability,
@@ -21,12 +35,12 @@ pub const AccountType = enum {
     expense,
 };
 
-pub const Direction = enum { debit, credit };
-
 pub const AccountStmt = struct {
     name: lexer.Token,
     span: source.Span,
 };
+
+pub const Direction = enum { debit, credit };
 
 pub const PostingStmt = struct {
     direction: Direction,
@@ -61,6 +75,7 @@ pub const Document = struct {
     journal_name: lexer.Token,
 
     sources: std.ArrayList(SourceStmt),
+    commodities: std.ArrayList(CommodityStmt),
     accounts: std.ArrayList(AccountStmt),
     transactions: std.ArrayList(TransactionStmt),
 
@@ -71,6 +86,7 @@ pub const Document = struct {
             .version = version,
             .journal_name = journal_name,
             .sources = .empty,
+            .commodities = .empty,
             .accounts = .empty,
             .transactions = .empty,
         };
@@ -84,6 +100,7 @@ pub const Document = struct {
 
         self.transactions.deinit(allocator);
         self.accounts.deinit(allocator);
+        self.commodities.deinit(allocator);
         self.sources.deinit(allocator);
         self.* = undefined;
     }
