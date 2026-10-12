@@ -1,19 +1,22 @@
 meta version 1
 meta journal "activity-coverage"
 
-transaction 2026-01-10 "Salary" id salary-2026-01 {
+transaction 2026-01-10 "Salary" {
+    id salary-2026-01
     debit  asset:bank:nzd:everyday 3000.00 NZD
     credit income:salary           3000.00 NZD
 }
 
-transaction 2026-01-15 "Savings interest" id interest-2026-01 {
+transaction 2026-01-15 "Savings interest" {
+    id interest-2026-01
     debit  asset:bank:nzd:everyday 10.00 NZD
     credit income:interest         10.00 NZD
 }
 
 # This records the cash dividend, but cannot yet associate it with
 # a security holding.
-transaction 2026-01-20 "Cash dividend" id dividend-2026-01 {
+transaction 2026-01-20 "Cash dividend" {
+    id dividend-2026-01
     debit  asset:bank:nzd:everyday 40.00 NZD
     credit income:dividend         40.00 NZD
 }

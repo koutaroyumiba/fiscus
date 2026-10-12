@@ -1,43 +1,51 @@
 meta version 1
 meta journal "activity-coverage"
 
-transaction 2026-01-11 "Groceries" id groceries-2026-01-11 {
+transaction 2026-01-11 "Groceries" {
+    id groceries-2026-01-11
     debit  expense:food:groceries  120.00 NZD
     credit asset:bank:nzd:everyday 120.00 NZD
 }
 
-transaction 2026-01-12 "Groceries and household supplies" id split-purchase-2026-01-12 {
+transaction 2026-01-12 "Groceries and household supplies" {
+    id split-purchase-2026-01-12
     debit  expense:food:groceries  80.00 NZD
     debit  expense:household       40.00 NZD
     credit asset:bank:nzd:everyday 120.00 NZD
 }
 
-transaction 2026-01-13 "Grocery refund" id refund-2026-01-13 {
+transaction 2026-01-13 "Grocery refund" {
+    id refund-2026-01-13
     debit  asset:bank:nzd:everyday 20.00 NZD
     credit expense:food:groceries  20.00 NZD
 }
 
-transaction 2026-01-14 "Cash withdrawal" id cash-withdrawal-2026-01-14 {
+transaction 2026-01-14 "Cash withdrawal" {
+    id cash-withdrawal-2026-01-14
     debit  asset:cash:nzd           100.00 NZD
     credit asset:bank:nzd:everyday 100.00 NZD
 }
 
-transaction 2026-01-16 "Bus fare paid with cash" id transport-2026-01-16 {
+transaction 2026-01-16 "Bus fare paid with cash" {
+    id transport-2026-01-16
     debit  expense:transport 30.00 NZD
     credit asset:cash:nzd    30.00 NZD
 }
 
-transaction 2026-01-18 "Monthly bank fee" id bank-fee-2026-01 {
+transaction 2026-01-18 "Monthly bank fee" {
+    id bank-fee-2026-01
     debit  expense:bank-fees       5.00 NZD
     credit asset:bank:nzd:everyday 5.00 NZD
 }
 
-transaction 2026-01-21 "Gift" id gift-2026-01-21 {
+transaction 2026-01-21 "Gift" {
+    id gift-2026-01-21
     debit  expense:gifts           50.00 NZD
     credit asset:bank:nzd:everyday 50.00 NZD
 }
 
-transaction 2026-01-22 "Tax payment" id tax-2026-01-22 {
+transaction 2026-01-22 "Tax payment" {
+    id tax-2026-01-22
     debit  expense:tax             200.00 NZD
     credit asset:bank:nzd:everyday 200.00 NZD
 }
