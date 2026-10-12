@@ -75,7 +75,7 @@ pub const Parser = struct {
             try document.accounts.append(allocator, account);
         }
 
-        while (self.matchesWord("transaction")) {
+        while (self.matchesWord("transaction") or self.matchesWord("txn")) {
             var transaction = try self.parseTransaction(allocator);
 
             document.transactions.append(allocator, transaction) catch |err| {
@@ -228,12 +228,21 @@ pub const Parser = struct {
         const keyword = try self.expectWord("account");
         const name = try self.expectKind(.word);
 
+        var account_commodity: ?lexer.Token = null;
+        if (self.matchesWord("commodity")) {
+            _ = try self.advance();
+            account_commodity = try self.expectKind(.word);
+        }
+
+        const end = if (account_commodity) |token| token.span.end else name.span.end;
+
         return .{
             .name = name,
+            .commodity = account_commodity,
             .span = .{
                 .source_id = keyword.span.source_id,
                 .start = keyword.span.start,
-                .end = name.span.end,
+                .end = end,
             },
         };
     }
@@ -253,7 +262,15 @@ pub const Parser = struct {
 
         const account = try self.expectKind(.word);
         const amount = try self.expectKind(.word);
-        const commodity = try self.expectKind(.word);
+
+        const posting_commodity: ?lexer.Token =
+            if (self.current.?.kind == .word and
+            !self.matchesWord("@@") and
+            !self.matchesWord("debit") and
+            !self.matchesWord("credit"))
+                try self.advance()
+            else
+                null;
 
         var valuation: ?ast.ValuationExpr = null;
         if (self.matchesWord("@@")) {
@@ -272,13 +289,18 @@ pub const Parser = struct {
             };
         }
 
-        const posting_end = if (valuation) |value| value.span.end else commodity.span.end;
+        const posting_end = if (valuation) |value|
+            value.span.end
+        else if (posting_commodity) |token|
+            token.span.end
+        else
+            amount.span.end;
 
         return .{
             .direction = direction,
             .account = account,
             .amount = amount,
-            .commodity = commodity,
+            .commodity = posting_commodity,
             .valuation = valuation,
             .span = .{
                 .source_id = direction_token.span.source_id,
@@ -322,7 +344,10 @@ pub const Parser = struct {
     }
 
     fn parseTransaction(self: *Self, allocator: std.mem.Allocator) !ast.TransactionStmt {
-        const keyword = try self.expectWord("transaction");
+        const keyword = self.current.?;
+        std.debug.assert(self.matchesWord("transaction") or self.matchesWord("txn"));
+        _ = try self.advance();
+
         const date = try self.expectKind(.word);
         const narration: ?lexer.Token =
             if (self.current.?.kind == .string)
@@ -427,6 +452,28 @@ test "parse account declarations" {
     try std.testing.expectEqualStrings("asset:bank", bank.name.lexeme);
 }
 
+test "parse fixed account commodity and short transaction" {
+    var parser = Parser.init(
+        \\meta version 1
+        \\meta journal "personal"
+        \\
+        \\account asset:bank commodity NZD
+        \\account expense:groceries commodity NZD
+        \\
+        \\txn 2026-01-17 "Groceries" {
+        \\  debit expense:groceries 82.40
+        \\  credit asset:bank 82.40
+        \\}
+    );
+
+    var document = try parser.parse(std.testing.allocator);
+    defer document.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualStrings("NZD", document.accounts.items[0].commodity.?.lexeme);
+    try std.testing.expectEqual(@as(usize, 1), document.transactions.items.len);
+    try std.testing.expect(document.transactions.items[0].postings.items[0].commodity == null);
+}
+
 test "parse transaction and postings" {
     var parser = Parser.init(
         \\meta version 1
@@ -483,7 +530,7 @@ test "parse total posting valuation" {
     const valued_posting = transaction.postings.items[0];
 
     try std.testing.expectEqualStrings("10.000000", valued_posting.amount.lexeme);
-    try std.testing.expectEqualStrings("NZX.AIR", valued_posting.commodity.lexeme);
+    try std.testing.expectEqualStrings("NZX.AIR", valued_posting.commodity.?.lexeme);
 
     const valuation = valued_posting.valuation.?;
     try std.testing.expectEqualStrings("7.80", valuation.amount.lexeme);

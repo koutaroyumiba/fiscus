@@ -17,12 +17,12 @@ A file contains, in order:
 meta version 1
 meta journal "personal"
 
-account asset:bank
-account equity:opening-balances
+account asset:bank commodity AUD
+account equity:opening-balances commodity AUD
 
-transaction 2026-01-01 "Opening balance" {
-    debit  asset:bank               1000.00 AUD
-    credit equity:opening-balances 1000.00 AUD
+txn 2026-01-01 "Opening balance" {
+    debit  asset:bank               1000.00
+    credit equity:opening-balances 1000.00
 }
 ```
 
@@ -85,8 +85,20 @@ Single-file journals remain valid and do not require source directives.
 ## Accounts
 
 ```fiscus
-account asset:bank:example-bank:au:everyday
+account asset:bank:example-bank:au:everyday commodity AUD
 ```
+
+The declaration grammar is:
+
+```text
+account ACCOUNT [commodity COMMODITY]
+```
+
+An account may optionally declare a fixed commodity with `commodity SYMBOL`. The
+symbol must be a built-in or previously declared commodity. Fixed-commodity
+accounts accept only that commodity and allow postings to omit it. Accounts
+without a fixed commodity may hold multiple commodities, and every posting to
+them must state its commodity explicitly.
 
 An account name consists of colon-separated components. Each component:
 
@@ -109,11 +121,14 @@ Accounts must be declared before transactions and cannot be declared more than o
 ## Transactions
 
 ```fiscus
-transaction 2026-01-17 "Groceries" {
+txn 2026-01-17 "Groceries" {
     debit  expense:food:groceries 82.40 AUD
     credit asset:bank             82.40 AUD
 }
 ```
+
+`txn` is the canonical transaction keyword. The longer `transaction` spelling
+remains accepted for compatibility.
 
 A transaction contains:
 
@@ -124,7 +139,7 @@ A transaction contains:
 The narration may be omitted:
 
 ```fiscus
-transaction 2026-01-17 {
+txn 2026-01-17 {
     debit  expense:food:groceries 82.40 AUD
     credit asset:bank             82.40 AUD
 }
@@ -133,7 +148,7 @@ transaction 2026-01-17 {
 An optional stable ID may appear inside the transaction body before any postings:
 
 ```fiscus
-transaction 2026-01-17 "Groceries" {
+txn 2026-01-17 "Groceries" {
     id groceries-001
 
     debit  expense:food:groceries 82.40 AUD
@@ -148,7 +163,7 @@ Explicit transaction IDs must be non-empty and unique within the journal.
 A transaction may contain metadata fields before its first posting. Fields may appear in any order.
 
 ```fiscus
-transaction 2026-01-17 "Groceries" {
+txn 2026-01-17 "Groceries" {
     id groceries-001
     note "Weekly shared grocery shop"
     tag shared
@@ -182,7 +197,10 @@ A posting contains:
 1. `debit` or `credit`;
 2. a declared account name;
 3. a positive decimal amount;
-4. a built-in or declared commodity symbol.
+4. a built-in or declared commodity symbol, unless inferred from the account.
+
+The commodity may be omitted only when the account declares a fixed commodity.
+An explicitly written commodity on such an account must match its declaration.
 
 Posting amounts cannot use signs, commas, or scientific notation. Zero amounts are rejected.
 
@@ -195,7 +213,7 @@ debit asset:broker:nzx:shares 10.000000 NZX.AIR @@ 7.80 NZD
 The posting grammar is:
 
 ```text
-DIRECTION ACCOUNT AMOUNT COMMODITY [@@ TOTAL_AMOUNT TOTAL_COMMODITY]
+DIRECTION ACCOUNT AMOUNT [COMMODITY] [@@ TOTAL_AMOUNT TOTAL_COMMODITY]
 ```
 
 `@@` records the total value of the native amount; it is not a per-unit price. The native amount changes the account balance, while the total valuation is used only to balance the transaction. Both amounts must be positive, and the valuation must use a different commodity from the native amount.
@@ -236,9 +254,11 @@ A valid journal requires:
 - commodity scales from 0 through 18;
 - non-empty optional commodity display names;
 - syntactically valid, unique accounts;
+- known optional fixed account commodities;
 - valid calendar dates;
 - declared posting accounts;
 - known commodities;
+- posting commodities that match fixed account commodities;
 - valid commodity precision;
 - positive posting amounts and total valuations;
 - valuation commodities different from their native posting commodities;

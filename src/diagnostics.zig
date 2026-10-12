@@ -88,6 +88,7 @@ pub fn fromDecoderFailure(failure: decoder.Failure) Diagnostic {
             .invalid_account_prefix => "invalid account type prefix",
             .invalid_account_name => "invalid account name",
             .duplicate_account => "account is declared more than once",
+            .unknown_account_commodity => "account uses an unknown commodity",
             .too_many_accounts => "journal contains too many accounts",
 
             .invalid_date => "invalid transaction date",
@@ -101,6 +102,8 @@ pub fn fromDecoderFailure(failure: decoder.Failure) Diagnostic {
 
             .unknown_account => "posting references an unknown account",
             .unknown_commodity => "posting uses an unknown commodity",
+            .missing_posting_commodity => "posting must specify a commodity for this account",
+            .account_commodity_mismatch => "posting commodity does not match the account commodity",
             .unknown_valuation_commodity => "posting valuation uses an unknown commodity",
             .invalid_amount => "invalid posting amount",
             .invalid_posting_amount => "posting amount must be greater than zero",

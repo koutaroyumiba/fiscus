@@ -36,6 +36,79 @@ test "parse and decode complete journal" {
     }
 }
 
+test "decode fixed account commodities and short transactions" {
+    const input =
+        \\meta version 1
+        \\meta journal "personal"
+        \\
+        \\account asset:bank commodity NZD
+        \\account expense:groceries commodity NZD
+        \\
+        \\txn 2026-01-17 "Groceries" {
+        \\  debit expense:groceries 82.40
+        \\  credit asset:bank 82.40
+        \\}
+    ;
+
+    var result = try fiscus.loader.load(std.testing.allocator, input);
+    defer result.deinit();
+
+    switch (result) {
+        .journal => |journal| {
+            const nzd = journal.catalog.find("NZD") orelse return error.ExpectedCommodity;
+            try std.testing.expectEqual(nzd, journal.accounts.items[0].commodity.?);
+            try std.testing.expectEqual(nzd, journal.transactions.items[0].postings.items[0].amount.commodity);
+            try journal.validate();
+        },
+        .failure => return error.UnexpectedFailure,
+    }
+}
+
+test "reject unknown fixed account commodity" {
+    const input =
+        \\meta version 1
+        \\meta journal "personal"
+        \\
+        \\account asset:bank commodity CAD
+    ;
+
+    try expectDecoderFailure(input, .unknown_account_commodity);
+}
+
+test "require posting commodity for unrestricted account" {
+    const input =
+        \\meta version 1
+        \\meta journal "personal"
+        \\
+        \\account asset:bank
+        \\account equity:opening-balances commodity NZD
+        \\
+        \\txn 2026-01-01 {
+        \\  debit asset:bank 100.00
+        \\  credit equity:opening-balances 100.00
+        \\}
+    ;
+
+    try expectDecoderFailure(input, .missing_posting_commodity);
+}
+
+test "reject posting commodity that differs from account" {
+    const input =
+        \\meta version 1
+        \\meta journal "personal"
+        \\
+        \\account asset:bank commodity NZD
+        \\account equity:opening-balances commodity NZD
+        \\
+        \\txn 2026-01-01 {
+        \\  debit asset:bank 100.00 AUD
+        \\  credit equity:opening-balances 100.00 NZD
+        \\}
+    ;
+
+    try expectDecoderFailure(input, .account_commodity_mismatch);
+}
+
 test "report unknown posting account" {
     const input =
         \\meta version 1
@@ -145,14 +218,14 @@ test "decode exact total posting valuation" {
         \\
         \\commodity NZX.AIR security scale 6 "Air New Zealand"
         \\
-        \\account asset:broker:shares
-        \\account asset:bank
-        \\account expense:broker-fees
+        \\account asset:broker:shares commodity NZX.AIR
+        \\account asset:bank commodity NZD
+        \\account expense:broker-fees commodity NZD
         \\
-        \\transaction 2026-02-02 "Buy shares" {
-        \\  debit asset:broker:shares 10.000000 NZX.AIR @@ 7.80 NZD
-        \\  debit expense:broker-fees 1.00 NZD
-        \\  credit asset:bank 8.80 NZD
+        \\txn 2026-02-02 "Buy shares" {
+        \\  debit asset:broker:shares 10.000000 @@ 7.80 NZD
+        \\  debit expense:broker-fees 1.00
+        \\  credit asset:bank 8.80
         \\}
     ;
 

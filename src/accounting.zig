@@ -16,6 +16,7 @@ pub const AccountType = enum {
 pub const Account = struct {
     name: []const u8,
     account_type: AccountType,
+    commodity: ?commodity.CommodityId,
 };
 
 pub const Direction = enum { debit, credit };
@@ -60,6 +61,7 @@ pub const JournalError = error{
     InvalidTransactionTag,
     UnknownAccount,
     UnknownCommodity,
+    AccountCommodityMismatch,
     UnknownTransaction,
     InvalidPostingAmount,
     InvalidPostingValuation,
@@ -148,6 +150,14 @@ pub const Journal = struct {
     }
 
     pub fn addAccount(self: *Self, name: []const u8) !AccountId {
+        return self.addAccountWithCommodity(name, null);
+    }
+
+    pub fn addAccountWithCommodity(
+        self: *Self,
+        name: []const u8,
+        account_commodity: ?commodity.CommodityId,
+    ) !AccountId {
         if (!isValidAccountName(name)) {
             return error.InvalidAccountName;
         }
@@ -158,6 +168,12 @@ pub const Journal = struct {
 
         if (self.account_ids_by_name.contains(name)) {
             return error.DuplicateAccount;
+        }
+
+        if (account_commodity) |commodity_id| {
+            if (self.catalog.get(commodity_id) == null) {
+                return error.UnknownCommodity;
+            }
         }
 
         if (self.accounts.items.len > std.math.maxInt(AccountId)) {
@@ -175,6 +191,7 @@ pub const Journal = struct {
         self.accounts.appendAssumeCapacity(.{
             .name = owned_name,
             .account_type = account_type,
+            .commodity = account_commodity,
         });
         self.account_ids_by_name.putAssumeCapacityNoClobber(owned_name, id);
 
@@ -295,12 +312,18 @@ pub const Journal = struct {
             return error.UnknownTransaction;
         }
 
-        if (self.getAccount(new_posting.account) == null) {
+        const account = self.getAccount(new_posting.account) orelse {
             return error.UnknownAccount;
-        }
+        };
 
         if (self.catalog.get(new_posting.amount.commodity) == null) {
             return error.UnknownCommodity;
+        }
+
+        if (account.commodity) |account_commodity| {
+            if (account_commodity != new_posting.amount.commodity) {
+                return error.AccountCommodityMismatch;
+            }
         }
 
         if (new_posting.amount.value <= 0) {

@@ -27,6 +27,7 @@ pub const FailureKind = enum {
     invalid_account_prefix,
     invalid_account_name,
     duplicate_account,
+    unknown_account_commodity,
     too_many_accounts,
 
     invalid_date,
@@ -40,6 +41,8 @@ pub const FailureKind = enum {
 
     unknown_account,
     unknown_commodity,
+    missing_posting_commodity,
+    account_commodity_mismatch,
     unknown_valuation_commodity,
     invalid_amount,
     invalid_posting_amount,
@@ -175,12 +178,20 @@ pub const Decoder = struct {
     pub fn decodeAccounts(self: *Self, journal: *accounting.Journal, accounts: []const ast.AccountStmt) !void {
         for (accounts) |account| {
             _ = try self.inferAccountType(account);
-            _ = journal.addAccount(account.name.lexeme) catch |err| {
+
+            const account_commodity: ?commodity.CommodityId = if (account.commodity) |token|
+                journal.catalog.find(token.lexeme) orelse
+                    return self.fail(.unknown_account_commodity, token.span)
+            else
+                null;
+
+            _ = journal.addAccountWithCommodity(account.name.lexeme, account_commodity) catch |err| {
                 return switch (err) {
                     error.OutOfMemory => error.OutOfMemory,
                     error.InvalidAccountName => self.fail(.invalid_account_name, account.name.span),
                     error.DuplicateAccount => self.fail(.duplicate_account, account.name.span),
                     error.TooManyAccounts => self.fail(.too_many_accounts, account.name.span),
+                    error.UnknownCommodity => unreachable,
                 };
             };
         }
@@ -370,9 +381,17 @@ pub const Decoder = struct {
             return self.fail(.unknown_account, posting.account.span);
         };
 
-        const amount = journal.catalog.parseAmount(posting.amount.lexeme, posting.commodity.lexeme) catch |err| {
+        const account_details = journal.getAccount(account).?;
+        const amount_commodity = if (posting.commodity) |token|
+            token.lexeme
+        else if (account_details.commodity) |commodity_id|
+            journal.catalog.get(commodity_id).?.symbol
+        else
+            return self.fail(.missing_posting_commodity, posting.amount.span);
+
+        const amount = journal.catalog.parseAmount(posting.amount.lexeme, amount_commodity) catch |err| {
             return switch (err) {
-                error.UnknownCommodity => self.fail(.unknown_commodity, posting.commodity.span),
+                error.UnknownCommodity => self.fail(.unknown_commodity, posting.commodity.?.span),
                 error.InvalidAmount,
                 error.TooMuchPrecision,
                 error.Overflow,
@@ -402,6 +421,10 @@ pub const Decoder = struct {
             return switch (err) {
                 error.OutOfMemory => error.OutOfMemory,
                 error.InvalidPostingAmount => self.fail(.invalid_posting_amount, posting.amount.span),
+                error.AccountCommodityMismatch => self.fail(
+                    .account_commodity_mismatch,
+                    posting.commodity.?.span,
+                ),
                 error.InvalidPostingValuation => self.fail(.invalid_posting_valuation, posting.valuation.?.span),
                 error.RedundantPostingValuation => self.fail(.redundant_posting_valuation, posting.valuation.?.span),
 

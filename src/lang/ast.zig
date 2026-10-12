@@ -38,6 +38,7 @@ pub const AccountType = enum {
 
 pub const AccountStmt = struct {
     name: lexer.Token,
+    commodity: ?lexer.Token,
     span: source.Span,
 };
 
@@ -53,7 +54,7 @@ pub const PostingStmt = struct {
     direction: Direction,
     account: lexer.Token,
     amount: lexer.Token,
-    commodity: lexer.Token,
+    commodity: ?lexer.Token,
     valuation: ?ValuationExpr,
     span: source.Span,
 };
