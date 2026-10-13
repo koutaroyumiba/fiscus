@@ -2,23 +2,30 @@
 
 # fiscus
 
+**A Complete Personal Financial Toolkit, powered by Zig**
+
 [![Status: Experimental](https://img.shields.io/badge/status-experimental-orange?style=flat-square)](#status)
 [![Zig](https://img.shields.io/badge/Zig-0.17.0-F7A41D?style=flat-square&logo=zig&logoColor=white)](https://ziglang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f?style=flat-square)](LICENSE)
 
-**A Complete Personal Financial Toolkit, powered by Zig**
-
 </div>
 
-The repository is named `fiscus`; its command-line program is `fis`.
+> [!WARNING] Status
+> Fiscus is still experimental. The file format may still undergo breaking changes.
 
-## Status
+> Required Zig version: **0.17.0**
 
-Fiscus is experimental. Currently, it can parse and validate journals, enforce double-entry accounting, and report natural account balances. The file format may still undergo breaking changes.
+## Introduction
 
-Required Zig version: **0.17.0**.
+This all started when I wanted to start tracking my finances... I felt like spreadsheets weren't enough for me (even though I definitely did not use 100% of its capabilities) and wanted to have everything in a program so that I can do whatever analysis I want to do on it.
 
-## Current Implementations
+Then, I came across [TigerBeetle](https://github.com/tigerbeetle/tigerbeetle) while learning [Zig](https://ziglang.org/) and it was so cool, inspiring me to make my own financial 'system' in Zig.
+
+While researching, I learnt about double-entry bookkeeping as well as examples of software that were simliar to what I wanted: [Beancount](https://beancount.github.io/docs/). Taking inspiration from all of these things, I decided (for no reason at all) to make my own DSL (`.fiscus`) to track my finances!
+
+It was a lot of fun to think about the syntax for this language and how to go about supporting some common financial activities that people go through :D
+
+## Current Features (implemented)
 
 ```sh
 # validate a journal (a .fiscus file)
@@ -26,33 +33,38 @@ fis check examples/personal.fiscus
 
 # print account balances
 fis balance examples/personal.fiscus
+
+# summarize an account and all of its descendants
+fis balance examples/personal.fiscus --prefix asset:bank
 ```
 
 ## Journal format (proposed - still experimental)
 
 Fiscus supports both single-file journals and multi-file workspaces.
 
+See [syntax.md](docs/syntax.md) for the `.fiscus` syntax spec.
+
 ```fiscus
 meta version 1
 meta journal "personal"
 
-account asset:bank
-account equity:opening-balances
-account income:salary
-account expense:food:groceries
+account asset:bank commodity AUD
+account equity:opening-balances commodity AUD
+account income:salary commodity AUD
+account expense:food:groceries commodity AUD
 
-transaction 2026-01-01 "Opening balance" {
-    debit  asset:bank               1000.00 AUD
-    credit equity:opening-balances 1000.00 AUD
+txn 2026-01-01 "Opening balance" {
+    debit  asset:bank               1000.00
+    credit equity:opening-balances 1000.00
 }
 
-transaction 2026-01-15 "Salary" {
+txn 2026-01-15 "Salary" {
     id salary-2026-01
     note "Monthly salary payment"
     tag income
 
-    debit  asset:bank    3000.00 AUD
-    credit income:salary 3000.00 AUD
+    debit  asset:bank    3000.00
+    credit income:salary 3000.00
 }
 ```
 
@@ -77,7 +89,9 @@ Account type is inferred from the first component of its name. Supported roots a
 - `income`
 - `expense`
 
-Transaction narrations and metadata are optional. A transaction body may contain one unique `id`, one quoted `note`, and any number of unique machine-readable `tag` fields before its postings.
+Accounts may optionally declare a fixed commodity with `commodity SYMBOL`. Postings to fixed-commodity accounts can omit the repeated symbol; unrestricted accounts continue to support multiple commodities.
+
+`txn` is the canonical transaction keyword, while `transaction` remains accepted for compatibility. Transaction narrations and metadata are optional. A transaction body may contain one unique `id`, one quoted `note`, and any number of unique machine-readable `tag` fields before its postings.
 
 See [`docs/language.md`](docs/language.md) for the implemented grammar and validation rules, and [`docs/glossary.md`](docs/glossary.md) for accounting terminology.
 
@@ -116,10 +130,26 @@ src/
         parser.zig
 ```
 
-## Motivation
+## Roadmap
 
-- [Beancount](https://beancount.github.io/docs/)
-- [TigerBeetle](https://github.com/tigerbeetle/tigerbeetle)
+- [ ] Account Lifetimes - (`open`, `close` keyword/field on accounts)
+- [ ] Balance Assertions - `balance` keyword to assert (or maybe just have `assert`?)
+- [ ] Price Observation - useful for stocks or maybe even currencies
+- [ ] Event - equivalent to a note attached to a date (useful for location/employer?)
+- [ ] Links - for relevant documents? (`link` keyword?)
+- [ ] Exporting/Importing from common file formats (maybe JSON?)
+- [ ] Error codes with diagnostics
+
+```text
+error[FIS1001]: unsupported Fiscus language version 3
+error[FIS1104]: invalid calendar date 2025-02-29
+error[FIS1201]: unknown account Expenses:Groceris
+error[FIS1202]: account Assets:Checking is closed on 2025-03-01
+error[FIS1204]: posting amount must be greater than zero
+error[FIS1205]: amount has 3 fractional digits; journal scale is 2
+error[FIS1301]: duplicate transaction ID "txn-001"
+error[FIS1401]: balance assertion failed by 25.00 NZD
+```
 
 ## License
 
