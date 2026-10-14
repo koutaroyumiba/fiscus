@@ -10,7 +10,7 @@
 
 </div>
 
-> [!WARNING] Status
+> [!WARNING]
 > Fiscus is still experimental. The file format may still undergo breaking changes.
 
 > Required Zig version: **0.17.0**
