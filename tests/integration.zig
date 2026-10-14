@@ -45,8 +45,8 @@ test "decode fixed account commodities and short transactions" {
         \\account expense:groceries commodity NZD
         \\
         \\txn 2026-01-17 "Groceries" {
-        \\  debit expense:groceries 82.40
-        \\  credit asset:bank 82.40
+        \\  + expense:groceries 82.40
+        \\  - asset:bank 82.40
         \\}
     ;
 
@@ -58,6 +58,8 @@ test "decode fixed account commodities and short transactions" {
             const nzd = journal.catalog.find("NZD") orelse return error.ExpectedCommodity;
             try std.testing.expectEqual(nzd, journal.accounts.items[0].commodity.?);
             try std.testing.expectEqual(nzd, journal.transactions.items[0].postings.items[0].amount.commodity);
+            try std.testing.expectEqual(fiscus.accounting.Direction.debit, journal.transactions.items[0].postings.items[0].direction);
+            try std.testing.expectEqual(fiscus.accounting.Direction.credit, journal.transactions.items[0].postings.items[1].direction);
             try journal.validate();
         },
         .failure => return error.UnexpectedFailure,

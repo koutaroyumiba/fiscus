@@ -247,13 +247,20 @@ pub const Parser = struct {
         };
     }
 
+    fn matchesPostingDirection(self: *const Self) bool {
+        return self.matchesWord("+") or
+            self.matchesWord("-") or
+            self.matchesWord("debit") or
+            self.matchesWord("credit");
+    }
+
     fn parsePosting(self: *Self) !ast.PostingStmt {
         const direction_token = self.current.?;
 
         const direction: ast.Direction =
-            if (self.matchesWord("debit"))
+            if (self.matchesWord("+") or self.matchesWord("debit"))
                 .debit
-            else if (self.matchesWord("credit"))
+            else if (self.matchesWord("-") or self.matchesWord("credit"))
                 .credit
             else
                 unreachable;
@@ -266,8 +273,7 @@ pub const Parser = struct {
         const posting_commodity: ?lexer.Token =
             if (self.current.?.kind == .word and
             !self.matchesWord("@@") and
-            !self.matchesWord("debit") and
-            !self.matchesWord("credit"))
+            !self.matchesPostingDirection())
                 try self.advance()
             else
                 null;
@@ -368,7 +374,7 @@ pub const Parser = struct {
         var postings: std.ArrayList(ast.PostingStmt) = .empty;
         errdefer postings.deinit(allocator);
 
-        while (self.matchesWord("debit") or self.matchesWord("credit")) {
+        while (self.matchesPostingDirection()) {
             const posting = try self.parsePosting();
             try postings.append(allocator, posting);
         }
@@ -461,8 +467,8 @@ test "parse fixed account commodity and short transaction" {
         \\account expense:groceries commodity NZD
         \\
         \\txn 2026-01-17 "Groceries" {
-        \\  debit expense:groceries 82.40
-        \\  credit asset:bank 82.40
+        \\  + expense:groceries 82.40
+        \\  - asset:bank 82.40
         \\}
     );
 
@@ -471,6 +477,8 @@ test "parse fixed account commodity and short transaction" {
 
     try std.testing.expectEqualStrings("NZD", document.accounts.items[0].commodity.?.lexeme);
     try std.testing.expectEqual(@as(usize, 1), document.transactions.items.len);
+    try std.testing.expectEqual(ast.Direction.debit, document.transactions.items[0].postings.items[0].direction);
+    try std.testing.expectEqual(ast.Direction.credit, document.transactions.items[0].postings.items[1].direction);
     try std.testing.expect(document.transactions.items[0].postings.items[0].commodity == null);
 }
 

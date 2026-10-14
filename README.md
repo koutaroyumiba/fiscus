@@ -54,8 +54,8 @@ account income:salary commodity AUD
 account expense:food:groceries commodity AUD
 
 txn 2026-01-01 "Opening balance" {
-    debit  asset:bank               1000.00
-    credit equity:opening-balances 1000.00
+    + asset:bank               1000.00
+    - equity:opening-balances 1000.00
 }
 
 txn 2026-01-15 "Salary" {
@@ -63,8 +63,8 @@ txn 2026-01-15 "Salary" {
     note "Monthly salary payment"
     tag income
 
-    debit  asset:bank    3000.00
-    credit income:salary 3000.00
+    + asset:bank    3000.00
+    - income:salary 3000.00
 }
 ```
 
@@ -91,7 +91,7 @@ Account type is inferred from the first component of its name. Supported roots a
 
 Accounts may optionally declare a fixed commodity with `commodity SYMBOL`. Postings to fixed-commodity accounts can omit the repeated symbol; unrestricted accounts continue to support multiple commodities.
 
-`txn` is the canonical transaction keyword, while `transaction` remains accepted for compatibility. Transaction narrations and metadata are optional. A transaction body may contain one unique `id`, one quoted `note`, and any number of unique machine-readable `tag` fields before its postings.
+`txn` is the canonical transaction keyword, while `transaction` remains accepted for compatibility. Posting directions may use concise `+` (debit) and `-` (credit) markers; the longer words remain accepted. Transaction narrations and metadata are optional. A transaction body may contain one unique `id`, one quoted `note`, and any number of unique machine-readable `tag` fields before its postings.
 
 See [`docs/language.md`](docs/language.md) for the implemented grammar and validation rules, and [`docs/glossary.md`](docs/glossary.md) for accounting terminology.
 
@@ -134,7 +134,7 @@ src/
 
 - [ ] Account Lifetimes - (`open`, `close` keyword/field on accounts)
 - [ ] Balance Assertions - `balance` keyword to assert (or maybe just have `assert`?)
-- [ ] Price Observation - useful for stocks or maybe even currencies
+- [ ] Price Observation - useful for stocks or maybe even currencies (cost basis)
 - [ ] Event - equivalent to a note attached to a date (useful for location/employer?)
 - [ ] Links - for relevant documents? (`link` keyword?)
 - [ ] Exporting/Importing from common file formats (maybe JSON?)

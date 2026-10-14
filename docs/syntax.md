@@ -30,8 +30,8 @@ txn DATE ["NARRATION"] {
     [note "NOTE"]
     [tag TAG]
 
-    debit ACCOUNT VALUE [COMMODITY] [@@ VALUE COMMODITY]
-    credit ACCOUNT VALUE [COMMODITY]
+    + ACCOUNT VALUE [COMMODITY] [@@ VALUE COMMODITY]
+    - ACCOUNT VALUE [COMMODITY]
 }
 ```
 
@@ -130,6 +130,22 @@ The first component determines the account type and must be one of:
 
 Accounts must be declared before transactions and cannot be declared more than once. An account may hold balances in more than one commodity.
 
+```text
+asset:<category>[:<institution>[:<jurisdiction>[:<account>[:<subaccount>]]]]
+liability:<category>[:<institution>[:<jurisdiction>[:<account>[:<subaccount>]]]]
+income:<category>:<source>[:<detail>]
+expense:<category>[:<subcategory>]
+equity:<category>
+```
+
+```fiscus
+account asset:bank:commbank:au:everyday
+account liability:credit-card:amex:au:platinum
+account equity:opening-balances
+account income:employment:acme:salary
+account expense:food:groceries
+```
+
 ## Transactions
 
 ```fiscus
@@ -138,8 +154,8 @@ txn DATE ["NARRATION"] {
     [note "NOTE"]
     [tag TAG]
 
-    debit ACCOUNT VALUE [COMMODITY] [@@ VALUE COMMODITY]
-    credit ACCOUNT VALUE [COMMODITY]
+    + ACCOUNT VALUE [COMMODITY] [@@ VALUE COMMODITY]
+    - ACCOUNT VALUE [COMMODITY]
 }
 
 txn 2026-01-17 "Groceries" {
@@ -147,14 +163,19 @@ txn 2026-01-17 "Groceries" {
     note "yummy cucumber"
     tag shared
 
-    debit   expense:food:groceries  82.40 AUD
-    credit  asset:bank              82.40 AUD
+    + expense:food:groceries  82.40 AUD
+    - asset:bank              82.40 AUD
 }
 
 # transaction with required fields only
 txn 2026-01-17 {
     debit   expense:food:groceries  82.40 NZD
     credit  asset:bank              82.40 NZD
+}
+
+txn 2026-01-17 {
+    + expense:food:groceries  82.40 NZD
+    - asset:bank              82.40 NZD
 }
 ```
 
@@ -177,17 +198,21 @@ Transaction fields must come before all postings. Once the first posting appears
 ## Postings
 
 ```fiscus
-DIRECTION ACCOUNT AMOUNT [COMMODITY] [@@ TOTAL_AMOUNT TOTAL_COMMODITY]
+(+ | - | debit | credit) ACCOUNT AMOUNT [COMMODITY] [@@ TOTAL_AMOUNT TOTAL_COMMODITY]
 
-debit asset:broker:nzx:shares 10.000000 NZX.AIR @@ 7.80 NZD
++ asset:broker:nzx:shares 10.000000 NZX.AIR @@ 7.80 NZD
 ```
 
 A posting contains:
-1. a direction: either `debit` or `credit`;
+1. a direction: `+` or `debit` for a debit, `-` or `credit` for a credit;
 2. a declared account name;
 3. a positive decimal amount;
-4. a built-in or declared commodity symbol, unless inferred from the accouunt;
-5. an optional 'conversion'
+4. a built-in or declared commodity symbol, unless inferred from the account;
+5. an optional conversion.
+
+`+` and `-` are direction markers, not signs on the amount. They do not mean
+that an account's natural balance increases or decreases; for example, a `-`
+credit posting increases an income account.
 
 The commodity may be omitted only when the account declares a fixed commodity. An explicitly written commodity on a fixed-commodity account must match its declaration.
 
