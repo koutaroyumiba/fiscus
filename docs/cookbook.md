@@ -2,6 +2,31 @@
 
 Here are just some common situations that I run into in my day-to-day life and how I would go about representing it in `.fiscus`.
 
+## Repo Structure
+
+Recommended to structure your repo/folder like this:
+
+```
+JOURNAL-NAME/
+    journal.fiscus      # main journal file
+    accounts.fiscus     # main account file
+    transactions/
+        # up to you how you structure this
+        2026/
+            01.fiscus   # for january transactions
+            ...
+```
+
+If following the above structure, in your `journal.fiscus`:
+
+```fiscus
+meta version 1
+meta journal "JOURNAL-NAME"
+
+source accounts "accounts.fiscus"
+source transactions "transactions"
+```
+
 ## Account Setup
 
 Apart from the first component, you are free to define your account structure. Here's a sample account system for personal financial tracking:
