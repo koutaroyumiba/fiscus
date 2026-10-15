@@ -36,6 +36,9 @@ fis balance examples/personal.fiscus
 
 # summarize an account and all of its descendants
 fis balance examples/personal.fiscus --prefix asset:bank
+
+# show the largest child balances first
+fis balance examples/personal.fiscus --prefix asset:bank --sort amount
 ```
 
 ## Journal format (proposed - still experimental)

@@ -11,6 +11,11 @@ const BalanceKey = struct {
     commodity: commodity.CommodityId,
 };
 
+pub const BalanceSort = enum {
+    account,
+    amount,
+};
+
 pub const Balance = struct {
     account: accounting.AccountId,
     amount: commodity.Amount,
@@ -101,6 +106,7 @@ pub fn calculatePrefixBalances(
     allocator: std.mem.Allocator,
     journal: *const accounting.Journal,
     prefix: []const u8,
+    sort: BalanceSort,
 ) (std.mem.Allocator.Error || ReportError || error{InvalidAccountPrefix})!PrefixBalanceReport {
     if (!accounting.isValidAccountPrefix(prefix)) {
         return error.InvalidAccountPrefix;
@@ -147,7 +153,12 @@ pub fn calculatePrefixBalances(
     }
 
     std.mem.sort(commodity.Amount, amounts.items, {}, lessThanAmount);
-    std.mem.sort(Balance, balances.items, journal, lessThanPrefixBalance);
+    std.mem.sort(
+        Balance,
+        balances.items,
+        PrefixSortContext{ .journal = journal, .sort = sort },
+        lessThanPrefixBalance,
+    );
 
     return .{
         .allocator = allocator,
@@ -222,8 +233,13 @@ fn lessThanAmount(_: void, left: commodity.Amount, right: commodity.Amount) bool
     return left.commodity < right.commodity;
 }
 
-fn lessThanPrefixBalance(
+const PrefixSortContext = struct {
     journal: *const accounting.Journal,
+    sort: BalanceSort,
+};
+
+fn lessThanPrefixBalance(
+    context: PrefixSortContext,
     left: Balance,
     right: Balance,
 ) bool {
@@ -231,8 +247,13 @@ fn lessThanPrefixBalance(
         return left.amount.commodity < right.amount.commodity;
     }
 
-    const left_name = journal.getAccount(left.account).?.name;
-    const right_name = journal.getAccount(right.account).?.name;
+    const left_name = context.journal.getAccount(left.account).?.name;
+    const right_name = context.journal.getAccount(right.account).?.name;
+
+    if (context.sort == .amount and left.amount.value != right.amount.value) {
+        return left.amount.value > right.amount.value;
+    }
+
     return std.mem.lessThan(u8, left_name, right_name);
 }
 
@@ -288,11 +309,12 @@ test "aggregate balances by component-aware account prefix" {
     const banking = try journal.addAccount("asset:banking");
     const opening = try journal.addAccount("equity:opening-balances");
     const aud = try journal.catalog.parseAmount("100.00", "AUD");
+    const larger_aud = try journal.catalog.parseAmount("200.00", "AUD");
     const usd = try journal.catalog.parseAmount("25.00", "USD");
 
     const entries = [_]struct { account: accounting.AccountId, amount: commodity.Amount }{
         .{ .account = checking, .amount = aud },
-        .{ .account = savings, .amount = aud },
+        .{ .account = savings, .amount = larger_aud },
         .{ .account = checking, .amount = usd },
         .{ .account = banking, .amount = aud },
     };
@@ -313,23 +335,25 @@ test "aggregate balances by component-aware account prefix" {
         });
     }
 
-    var report = try calculatePrefixBalances(std.testing.allocator, &journal, "asset:bank");
+    var report = try calculatePrefixBalances(std.testing.allocator, &journal, "asset:bank", .account);
     defer report.deinit();
 
     try std.testing.expectEqual(@as(usize, 2), report.amounts.items.len);
     try std.testing.expectEqual(@as(usize, 3), report.balances.items.len);
-    try std.testing.expectEqual(@as(i64, 20_000), report.amounts.items[0].value);
+    try std.testing.expectEqual(@as(i64, 30_000), report.amounts.items[0].value);
     try std.testing.expectEqual(@as(i64, 2_500), report.amounts.items[1].value);
+    try std.testing.expectEqual(checking, report.balances.items[0].account);
+    try std.testing.expectEqual(savings, report.balances.items[1].account);
 
     var output = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer output.deinit();
     try writePrefixBalances(&output.writer, &journal, "asset:bank", &report);
 
     try std.testing.expectEqualStrings(
-        \\asset:bank                                    200.00 AUD
+        \\asset:bank                                    300.00 AUD
         \\------------------------------------------------------------
         \\  asset:bank:checking                         100.00 AUD
-        \\  asset:bank:savings                          100.00 AUD
+        \\  asset:bank:savings                          200.00 AUD
         \\
         \\asset:bank                                    25.00 USD
         \\------------------------------------------------------------
@@ -337,9 +361,20 @@ test "aggregate balances by component-aware account prefix" {
         \\
     , output.written());
 
+    var amount_sorted = try calculatePrefixBalances(
+        std.testing.allocator,
+        &journal,
+        "asset:bank",
+        .amount,
+    );
+    defer amount_sorted.deinit();
+
+    try std.testing.expectEqual(savings, amount_sorted.balances.items[0].account);
+    try std.testing.expectEqual(checking, amount_sorted.balances.items[1].account);
+
     try std.testing.expectError(
         error.InvalidAccountPrefix,
-        calculatePrefixBalances(std.testing.allocator, &journal, "asset:Bank"),
+        calculatePrefixBalances(std.testing.allocator, &journal, "asset:Bank", .account),
     );
 }
 
