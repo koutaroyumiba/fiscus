@@ -36,6 +36,7 @@ pub fn run(
     var sort: fiscus.reports.BalanceSort = .account;
     var sort_was_set = false;
 
+    var inspect_id: ?[]const u8 = null;
     var inspect_account: ?[]const u8 = null;
     var inspect_from: ?fiscus.time.Date = null;
     var inspect_to: ?fiscus.time.Date = null;
@@ -111,7 +112,14 @@ pub fn run(
 
             var index: usize = 3;
             while (index < args.len) {
-                if (std.mem.eql(u8, args[index], "--account")) {
+                if (std.mem.eql(u8, args[index], "--id")) {
+                    if (index + 1 >= args.len or inspect_id != null) {
+                        try writeUsage(stderr);
+                        return 2;
+                    }
+                    inspect_id = args[index + 1];
+                    index += 2;
+                } else if (std.mem.eql(u8, args[index], "--account")) {
                     if (index + 1 >= args.len or inspect_account != null) {
                         try writeUsage(stderr);
                         return 2;
@@ -200,6 +208,13 @@ pub fn run(
                     }
                 },
                 .inspect => {
+                    if (inspect_id) |id| {
+                        if (journal.findTransactionById(id) == null) {
+                            try stderr.print("fis: unknown transaction ID '{s}'\n", .{id});
+                            return 1;
+                        }
+                    }
+
                     const account = if (inspect_account) |name|
                         journal.findAccount(name) orelse {
                             try stderr.print("fis: unknown account '{s}'\n", .{name});
@@ -209,6 +224,7 @@ pub fn run(
                         null;
 
                     var report = try fiscus.reports.inspectTransactions(allocator, &journal, .{
+                        .id = inspect_id,
                         .account = account,
                         .from = inspect_from,
                         .to = inspect_to,
@@ -240,7 +256,7 @@ fn writeUsage(writer: *std.Io.Writer) !void {
         \\  fis check <file>
         \\  fis balance <file>
         \\  fis balance <file> --prefix <account> [--sort account|amount]
-        \\  fis inspect <file> [--account <account>] [--from <date>] [--to <date>] [--tag <tag>]
+        \\  fis inspect <file> [--id <id>] [--account <account>] [--from <date>] [--to <date>] [--tag <tag>]
         \\
     );
 }

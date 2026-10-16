@@ -22,6 +22,7 @@ pub const Balance = struct {
 };
 
 pub const InspectFilter = struct {
+    id: ?[]const u8 = null,
     account: ?accounting.AccountId = null,
     from: ?time.Date = null,
     to: ?time.Date = null,
@@ -193,6 +194,13 @@ pub fn inspectTransactions(
     errdefer transactions.deinit(allocator);
 
     for (journal.transactions.items, 0..) |transaction, index| {
+        if (filter.id) |id| {
+            const transaction_id = transaction.id orelse continue;
+            if (!std.mem.eql(u8, transaction_id, id)) {
+                continue;
+            }
+        }
+
         if (filter.from) |from| {
             if (transaction.date.order(from) == .lt) {
                 continue;
@@ -415,6 +423,7 @@ test "inspect transactions with structured filters and chronological ordering" {
 
     const later = try journal.addTransaction(.{
         .date = try time.Date.parse("2026-02-01"),
+        .id = "groceries-1",
         .narration = "Groceries",
     });
     try journal.addTransactionTag(later, "food");
@@ -437,6 +446,7 @@ test "inspect transactions with structured filters and chronological ordering" {
     );
 
     var filtered = try inspectTransactions(std.testing.allocator, &journal, .{
+        .id = "groceries-1",
         .account = groceries,
         .from = try time.Date.parse("2026-02-01"),
         .to = try time.Date.parse("2026-02-01"),
@@ -452,6 +462,10 @@ test "inspect transactions with structured filters and chronological ordering" {
     var no_matches = try inspectTransactions(std.testing.allocator, &journal, .{ .tag = "missing" });
     defer no_matches.deinit();
     try std.testing.expectEqual(@as(usize, 0), no_matches.transactions.items.len);
+
+    var unknown_id = try inspectTransactions(std.testing.allocator, &journal, .{ .id = "missing" });
+    defer unknown_id.deinit();
+    try std.testing.expectEqual(@as(usize, 0), unknown_id.transactions.items.len);
 }
 
 test "report separate balances per commodity" {

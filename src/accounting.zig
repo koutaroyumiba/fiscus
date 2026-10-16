@@ -282,6 +282,10 @@ pub const Journal = struct {
         return index;
     }
 
+    pub fn findTransactionById(self: *const Self, id: []const u8) ?TransactionIndex {
+        return self.transaction_indices_by_id.get(id);
+    }
+
     pub fn addTransactionTag(self: *Self, transaction_index: TransactionIndex, tag: []const u8) !void {
         const index = std.math.cast(usize, transaction_index) orelse return error.UnknownTransaction;
 
@@ -526,7 +530,10 @@ test "construct basic journal" {
     defer journal.deinit();
 
     const bank = try journal.addAccount("asset:bank");
-    const transaction = try journal.addTransaction(.{ .date = try time.Date.init(2026, .jan, 1) });
+    const transaction = try journal.addTransaction(.{
+        .date = try time.Date.init(2026, .jan, 1),
+        .id = "opening",
+    });
     const amount = try journal.catalog.parseAmount("1000.00", "AUD");
 
     try journal.addPosting(transaction, .{
@@ -540,6 +547,8 @@ test "construct basic journal" {
     try std.testing.expectError(error.InvalidAccountName, journal.addAccount("assets:bank"));
     try std.testing.expectEqual(@as(usize, 1), journal.transactions.items.len);
     try std.testing.expectEqual(@as(usize, 1), journal.transactions.items[0].postings.items.len);
+    try std.testing.expectEqual(transaction, journal.findTransactionById("opening").?);
+    try std.testing.expectEqual(@as(?TransactionIndex, null), journal.findTransactionById("missing"));
 
     const opening = try journal.addAccount("equity:opening-balances");
 
