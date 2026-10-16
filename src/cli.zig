@@ -32,6 +32,8 @@ pub fn run(
             return 2;
         };
 
+    var file_name: []const u8 = "journal.fiscus";
+
     var prefix: ?[]const u8 = null;
     var sort: fiscus.reports.BalanceSort = .account;
     var sort_was_set = false;
@@ -49,14 +51,15 @@ pub fn run(
                 try writeUsage(stderr);
                 return 2;
             }
+            file_name = args[2];
         },
         .balance => {
-            if (args.len < 3) {
-                try writeUsage(stderr);
-                return 2;
+            var index: usize = 2;
+            if (index < args.len and !std.mem.startsWith(u8, args[index], "--")) {
+                file_name = args[index];
+                index += 1;
             }
 
-            var index: usize = 3;
             while (index < args.len) {
                 if (std.mem.eql(u8, args[index], "--prefix")) {
                     if (index + 1 >= args.len or prefix != null) {
@@ -110,6 +113,7 @@ pub fn run(
                 try writeUsage(stderr);
                 return 2;
             }
+            file_name = args[2];
 
             var index: usize = 3;
             while (index < args.len) {
@@ -181,7 +185,6 @@ pub fn run(
         },
     }
 
-    const file_name = args[2];
     var workspace = fiscus.workspace.load(allocator, io, std.Io.Dir.cwd(), file_name) catch |err| {
         try stderr.print("fis: cannot load '{s}': {s}\n", .{ file_name, @errorName(err) });
         return 1;
@@ -287,8 +290,8 @@ fn writeUsage(writer: *std.Io.Writer) !void {
     try writer.writeAll(
         \\usage:
         \\  fis check <file>
-        \\  fis balance <file>
-        \\  fis balance <file> --prefix <account> [--sort account|amount]
+        \\  fis balance [file]
+        \\  fis balance [file] --prefix <account> [--sort account|amount]
         \\  fis inspect <file> [--id <id>] [--account <account>] [--from <date>] [--to <date>] [--tag <tag>] [--running-balance]
         \\
     );

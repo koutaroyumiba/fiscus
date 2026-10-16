@@ -31,7 +31,10 @@ It was a lot of fun to think about the syntax for this language and how to go ab
 # validate a journal (a .fiscus file)
 fis check examples/personal.fiscus
 
-# print account balances
+# print account balances (defaults to ./journal.fiscus)
+fis balance
+
+# or provide a journal explicitly
 fis balance examples/personal.fiscus
 
 # summarize an account and all of its descendants
