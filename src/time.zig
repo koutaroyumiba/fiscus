@@ -48,9 +48,23 @@ pub const Date = struct {
 
     // === GETTERS AND FORMATTERS
 
+    pub fn order(self: Date, other: Date) std.math.Order {
+        if (self.year != other.year) {
+            return std.math.order(self.year, other.year);
+        }
+
+        const self_month = @backingInt(self.month);
+        const other_month = @backingInt(other.month);
+        if (self_month != other_month) {
+            return std.math.order(self_month, other_month);
+        }
+
+        return std.math.order(self.day, other.day);
+    }
+
     pub fn iso(self: Date) [10]u8 {
         // iso format: "1234-67-90" (10 bytes)
-        const buffer: [10]u8 = undefined;
+        var buffer: [10]u8 = undefined;
         _ = std.mem.print(&buffer, "{d:0>4}-{d:0>2}-{d:0>2}", .{ self.year, @backingInt(self.month), self.day }) catch unreachable;
 
         return buffer;
@@ -91,8 +105,12 @@ test "Date.init validates dates" {
     try std.testing.expectError(error.InvalidDay, Date.init(2024, .jan, 0));
 }
 
-test "parse ISO date" {
-    try std.testing.expectEqual(Date{ .year = 2026, .month = .jan, .day = 17 }, try Date.parse("2026-01-17"));
+test "parse and compare ISO dates" {
+    const date = try Date.parse("2026-01-17");
+    try std.testing.expectEqual(Date{ .year = 2026, .month = .jan, .day = 17 }, date);
+    try std.testing.expectEqual(std.math.Order.eq, date.order(try Date.parse("2026-01-17")));
+    try std.testing.expectEqual(std.math.Order.lt, date.order(try Date.parse("2026-02-01")));
+    try std.testing.expectEqual(std.math.Order.gt, date.order(try Date.parse("2025-12-31")));
 }
 
 test "reject invalid ISO dates" {

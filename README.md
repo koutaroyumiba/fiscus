@@ -39,6 +39,13 @@ fis balance examples/personal.fiscus --prefix asset:bank
 
 # show the largest child balances first
 fis balance examples/personal.fiscus --prefix asset:bank --sort amount
+
+# inspect transactions in chronological order
+fis inspect examples/personal.fiscus
+
+# filter inspected transactions (date bounds are inclusive)
+fis inspect examples/personal.fiscus --account asset:bank:example-bank:au:everyday --from 2026-01-01 --to 2026-01-31
+fis inspect examples/personal.fiscus --tag income
 ```
 
 ## Journal format (proposed - still experimental)

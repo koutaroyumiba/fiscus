@@ -21,6 +21,23 @@ pub const Balance = struct {
     amount: commodity.Amount,
 };
 
+pub const InspectFilter = struct {
+    account: ?accounting.AccountId = null,
+    from: ?time.Date = null,
+    to: ?time.Date = null,
+    tag: ?[]const u8 = null,
+};
+
+pub const InspectReport = struct {
+    allocator: std.mem.Allocator,
+    transactions: std.ArrayList(accounting.TransactionIndex),
+
+    pub fn deinit(self: *InspectReport) void {
+        self.transactions.deinit(self.allocator);
+        self.* = undefined;
+    }
+};
+
 pub const BalanceReport = struct {
     allocator: std.mem.Allocator,
     balances: std.ArrayList(Balance),
@@ -167,43 +184,64 @@ pub fn calculatePrefixBalances(
     };
 }
 
-pub fn writeBalances(writer: *std.Io.Writer, journal: *const accounting.Journal, report: *const BalanceReport) !void {
-    for (report.balances.items) |balance| {
-        const account = journal.getAccount(balance.account).?;
-
-        try writer.print("{s:<45} ", .{account.name});
-        try journal.catalog.writeAmount(writer, balance.amount);
-        try writer.writeByte('\n');
-    }
-}
-
-pub fn writePrefixBalances(
-    writer: *std.Io.Writer,
+pub fn inspectTransactions(
+    allocator: std.mem.Allocator,
     journal: *const accounting.Journal,
-    prefix: []const u8,
-    report: *const PrefixBalanceReport,
-) !void {
-    for (report.amounts.items, 0..) |amount, amount_index| {
-        if (amount_index != 0) {
-            try writer.writeByte('\n');
-        }
+    filter: InspectFilter,
+) std.mem.Allocator.Error!InspectReport {
+    var transactions: std.ArrayList(accounting.TransactionIndex) = .empty;
+    errdefer transactions.deinit(allocator);
 
-        try writer.print("{s:<45} ", .{prefix});
-        try journal.catalog.writeAmount(writer, amount);
-        try writer.writeByte('\n');
-        try writer.writeAll("------------------------------------------------------------\n");
-
-        for (report.balances.items) |balance| {
-            if (balance.amount.commodity != amount.commodity) {
+    for (journal.transactions.items, 0..) |transaction, index| {
+        if (filter.from) |from| {
+            if (transaction.date.order(from) == .lt) {
                 continue;
             }
-
-            const account = journal.getAccount(balance.account).?;
-            try writer.print("  {s:<43} ", .{account.name});
-            try journal.catalog.writeAmount(writer, balance.amount);
-            try writer.writeByte('\n');
         }
+
+        if (filter.to) |to| {
+            if (transaction.date.order(to) == .gt) {
+                continue;
+            }
+        }
+
+        if (filter.account) |account| {
+            var found = false;
+            for (transaction.postings.items) |posting| {
+                if (posting.account == account) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                continue;
+            }
+        }
+
+        if (filter.tag) |tag| {
+            var found = false;
+            for (transaction.tags.items) |transaction_tag| {
+                if (std.mem.eql(u8, transaction_tag, tag)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                continue;
+            }
+        }
+
+        try transactions.append(allocator, @intCast(index));
     }
+
+    std.mem.sort(
+        accounting.TransactionIndex,
+        transactions.items,
+        journal,
+        lessThanTransaction,
+    );
+
+    return .{ .allocator = allocator, .transactions = transactions };
 }
 
 fn removeZeroBalances(balances: *std.ArrayList(Balance)) void {
@@ -231,6 +269,21 @@ fn lessThanBalance(_: void, left: Balance, right: Balance) bool {
 
 fn lessThanAmount(_: void, left: commodity.Amount, right: commodity.Amount) bool {
     return left.commodity < right.commodity;
+}
+
+fn lessThanTransaction(
+    journal: *const accounting.Journal,
+    left: accounting.TransactionIndex,
+    right: accounting.TransactionIndex,
+) bool {
+    const left_transaction = journal.transactions.items[left];
+    const right_transaction = journal.transactions.items[right];
+
+    return switch (left_transaction.date.order(right_transaction.date)) {
+        .lt => true,
+        .gt => false,
+        .eq => left < right,
+    };
 }
 
 const PrefixSortContext = struct {
@@ -287,17 +340,6 @@ test "calculate natural accounting balances" {
     try std.testing.expectEqual(@as(usize, 2), report.balances.items.len);
     try std.testing.expectEqual(@as(i64, 100_000), report.balances.items[0].amount.value);
     try std.testing.expectEqual(@as(i64, 100_000), report.balances.items[1].amount.value);
-
-    var output = std.Io.Writer.Allocating.init(std.testing.allocator);
-    defer output.deinit();
-
-    try writeBalances(&output.writer, &journal, &report);
-
-    try std.testing.expectEqualStrings(
-        \\asset:bank                                    1000.00 AUD
-        \\equity:opening-balances                       1000.00 AUD
-        \\
-    , output.written());
 }
 
 test "aggregate balances by component-aware account prefix" {
@@ -345,22 +387,6 @@ test "aggregate balances by component-aware account prefix" {
     try std.testing.expectEqual(checking, report.balances.items[0].account);
     try std.testing.expectEqual(savings, report.balances.items[1].account);
 
-    var output = std.Io.Writer.Allocating.init(std.testing.allocator);
-    defer output.deinit();
-    try writePrefixBalances(&output.writer, &journal, "asset:bank", &report);
-
-    try std.testing.expectEqualStrings(
-        \\asset:bank                                    300.00 AUD
-        \\------------------------------------------------------------
-        \\  asset:bank:checking                         100.00 AUD
-        \\  asset:bank:savings                          200.00 AUD
-        \\
-        \\asset:bank                                    25.00 USD
-        \\------------------------------------------------------------
-        \\  asset:bank:checking                         25.00 USD
-        \\
-    , output.written());
-
     var amount_sorted = try calculatePrefixBalances(
         std.testing.allocator,
         &journal,
@@ -376,6 +402,56 @@ test "aggregate balances by component-aware account prefix" {
         error.InvalidAccountPrefix,
         calculatePrefixBalances(std.testing.allocator, &journal, "asset:Bank", .account),
     );
+}
+
+test "inspect transactions with structured filters and chronological ordering" {
+    var journal = try accounting.Journal.init(std.testing.allocator, 1, "personal");
+    defer journal.deinit();
+
+    const bank = try journal.addAccount("asset:bank");
+    const groceries = try journal.addAccount("expense:groceries");
+    const opening = try journal.addAccount("equity:opening-balances");
+    const amount = try journal.catalog.parseAmount("10.00", "AUD");
+
+    const later = try journal.addTransaction(.{
+        .date = try time.Date.parse("2026-02-01"),
+        .narration = "Groceries",
+    });
+    try journal.addTransactionTag(later, "food");
+    try journal.addPosting(later, .{ .direction = .debit, .account = groceries, .amount = amount });
+    try journal.addPosting(later, .{ .direction = .credit, .account = bank, .amount = amount });
+
+    const earlier = try journal.addTransaction(.{
+        .date = try time.Date.parse("2026-01-01"),
+        .narration = "Opening balance",
+    });
+    try journal.addPosting(earlier, .{ .direction = .debit, .account = bank, .amount = amount });
+    try journal.addPosting(earlier, .{ .direction = .credit, .account = opening, .amount = amount });
+
+    var all = try inspectTransactions(std.testing.allocator, &journal, .{});
+    defer all.deinit();
+    try std.testing.expectEqualSlices(
+        accounting.TransactionIndex,
+        &.{ earlier, later },
+        all.transactions.items,
+    );
+
+    var filtered = try inspectTransactions(std.testing.allocator, &journal, .{
+        .account = groceries,
+        .from = try time.Date.parse("2026-02-01"),
+        .to = try time.Date.parse("2026-02-01"),
+        .tag = "food",
+    });
+    defer filtered.deinit();
+    try std.testing.expectEqualSlices(
+        accounting.TransactionIndex,
+        &.{later},
+        filtered.transactions.items,
+    );
+
+    var no_matches = try inspectTransactions(std.testing.allocator, &journal, .{ .tag = "missing" });
+    defer no_matches.deinit();
+    try std.testing.expectEqual(@as(usize, 0), no_matches.transactions.items.len);
 }
 
 test "report separate balances per commodity" {

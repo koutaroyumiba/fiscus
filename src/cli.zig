@@ -1,9 +1,11 @@
 const std = @import("std");
 const fiscus = @import("fiscus");
+const render = @import("cli_render.zig");
 
 const Command = enum {
     check,
     balance,
+    inspect,
 };
 
 pub fn run(
@@ -23,6 +25,8 @@ pub fn run(
             .check
         else if (std.mem.eql(u8, args[1], "balance"))
             .balance
+        else if (std.mem.eql(u8, args[1], "inspect"))
+            .inspect
         else {
             try writeUsage(stderr);
             return 2;
@@ -31,6 +35,11 @@ pub fn run(
     var prefix: ?[]const u8 = null;
     var sort: fiscus.reports.BalanceSort = .account;
     var sort_was_set = false;
+
+    var inspect_account: ?[]const u8 = null;
+    var inspect_from: ?fiscus.time.Date = null;
+    var inspect_to: ?fiscus.time.Date = null;
+    var inspect_tag: ?[]const u8 = null;
 
     switch (command) {
         .check => {
@@ -94,6 +103,61 @@ pub fn run(
                 }
             }
         },
+        .inspect => {
+            if (args.len < 3) {
+                try writeUsage(stderr);
+                return 2;
+            }
+
+            var index: usize = 3;
+            while (index < args.len) {
+                if (std.mem.eql(u8, args[index], "--account")) {
+                    if (index + 1 >= args.len or inspect_account != null) {
+                        try writeUsage(stderr);
+                        return 2;
+                    }
+                    inspect_account = args[index + 1];
+                    index += 2;
+                } else if (std.mem.eql(u8, args[index], "--from")) {
+                    if (index + 1 >= args.len or inspect_from != null) {
+                        try writeUsage(stderr);
+                        return 2;
+                    }
+                    const value = args[index + 1];
+                    inspect_from = fiscus.time.Date.parse(value) catch {
+                        try stderr.print("fis: invalid date '{s}' for --from\n", .{value});
+                        return 2;
+                    };
+                    index += 2;
+                } else if (std.mem.eql(u8, args[index], "--to")) {
+                    if (index + 1 >= args.len or inspect_to != null) {
+                        try writeUsage(stderr);
+                        return 2;
+                    }
+                    const value = args[index + 1];
+                    inspect_to = fiscus.time.Date.parse(value) catch {
+                        try stderr.print("fis: invalid date '{s}' for --to\n", .{value});
+                        return 2;
+                    };
+                    index += 2;
+                } else if (std.mem.eql(u8, args[index], "--tag")) {
+                    if (index + 1 >= args.len or inspect_tag != null) {
+                        try writeUsage(stderr);
+                        return 2;
+                    }
+                    inspect_tag = args[index + 1];
+                    index += 2;
+                } else {
+                    try writeUsage(stderr);
+                    return 2;
+                }
+            }
+
+            if (inspect_from != null and inspect_to != null and inspect_from.?.order(inspect_to.?) == .gt) {
+                try stderr.writeAll("fis: --from date must not be after --to date\n");
+                return 2;
+            }
+        },
     }
 
     const file_name = args[2];
@@ -121,7 +185,7 @@ pub fn run(
                         };
                         defer report.deinit();
 
-                        try fiscus.reports.writePrefixBalances(stdout, &journal, value, &report);
+                        try render.writePrefixBalances(stdout, &journal, value, &report);
                     } else {
                         var report = fiscus.reports.calculateBalances(allocator, &journal) catch |err| switch (err) {
                             error.OutOfMemory => return error.OutOfMemory,
@@ -132,8 +196,27 @@ pub fn run(
                         };
                         defer report.deinit();
 
-                        try fiscus.reports.writeBalances(stdout, &journal, &report);
+                        try render.writeBalances(stdout, &journal, &report);
                     }
+                },
+                .inspect => {
+                    const account = if (inspect_account) |name|
+                        journal.findAccount(name) orelse {
+                            try stderr.print("fis: unknown account '{s}'\n", .{name});
+                            return 1;
+                        }
+                    else
+                        null;
+
+                    var report = try fiscus.reports.inspectTransactions(allocator, &journal, .{
+                        .account = account,
+                        .from = inspect_from,
+                        .to = inspect_to,
+                        .tag = inspect_tag,
+                    });
+                    defer report.deinit();
+
+                    try render.writeInspect(stdout, &journal, &report);
                 },
             }
 
@@ -147,12 +230,17 @@ pub fn run(
     };
 }
 
+test {
+    _ = render;
+}
+
 fn writeUsage(writer: *std.Io.Writer) !void {
     try writer.writeAll(
         \\usage:
         \\  fis check <file>
         \\  fis balance <file>
         \\  fis balance <file> --prefix <account> [--sort account|amount]
+        \\  fis inspect <file> [--account <account>] [--from <date>] [--to <date>] [--tag <tag>]
         \\
     );
 }
