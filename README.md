@@ -49,7 +49,12 @@ fis inspect examples/personal.fiscus --id salary-2026-01
 # combine filters (date bounds are inclusive)
 fis inspect examples/personal.fiscus --account asset:bank:example-bank:au:everyday --from 2026-01-01 --to 2026-01-31
 fis inspect examples/personal.fiscus --tag income
+
+# show account changes and running balances
+fis inspect examples/personal.fiscus --account asset:bank:example-bank:au:everyday --running-balance
 ```
+
+Running balances use the account's natural accounting sign and include earlier transactions when `--from` filters the displayed entries.
 
 ## Journal format (proposed - still experimental)
 

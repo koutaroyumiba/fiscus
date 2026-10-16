@@ -41,6 +41,7 @@ pub fn run(
     var inspect_from: ?fiscus.time.Date = null;
     var inspect_to: ?fiscus.time.Date = null;
     var inspect_tag: ?[]const u8 = null;
+    var inspect_running_balance = false;
 
     switch (command) {
         .check => {
@@ -155,6 +156,13 @@ pub fn run(
                     }
                     inspect_tag = args[index + 1];
                     index += 2;
+                } else if (std.mem.eql(u8, args[index], "--running-balance")) {
+                    if (inspect_running_balance) {
+                        try writeUsage(stderr);
+                        return 2;
+                    }
+                    inspect_running_balance = true;
+                    index += 1;
                 } else {
                     try writeUsage(stderr);
                     return 2;
@@ -163,6 +171,11 @@ pub fn run(
 
             if (inspect_from != null and inspect_to != null and inspect_from.?.order(inspect_to.?) == .gt) {
                 try stderr.writeAll("fis: --from date must not be after --to date\n");
+                return 2;
+            }
+
+            if (inspect_running_balance and inspect_account == null) {
+                try stderr.writeAll("fis: --running-balance requires --account\n");
                 return 2;
             }
         },
@@ -223,16 +236,36 @@ pub fn run(
                     else
                         null;
 
-                    var report = try fiscus.reports.inspectTransactions(allocator, &journal, .{
+                    const filter = fiscus.reports.InspectFilter{
                         .id = inspect_id,
                         .account = account,
                         .from = inspect_from,
                         .to = inspect_to,
                         .tag = inspect_tag,
-                    });
-                    defer report.deinit();
+                    };
 
-                    try render.writeInspect(stdout, &journal, &report);
+                    if (inspect_running_balance) {
+                        var report = fiscus.reports.calculateAccountRegister(
+                            allocator,
+                            &journal,
+                            account.?,
+                            filter,
+                        ) catch |err| switch (err) {
+                            error.OutOfMemory => return error.OutOfMemory,
+                            error.Overflow => {
+                                try stderr.writeAll("fis: account running balance overflow\n");
+                                return 1;
+                            },
+                        };
+                        defer report.deinit();
+
+                        try render.writeAccountRegister(stdout, &journal, &report);
+                    } else {
+                        var report = try fiscus.reports.inspectTransactions(allocator, &journal, filter);
+                        defer report.deinit();
+
+                        try render.writeInspect(stdout, &journal, &report);
+                    }
                 },
             }
 
@@ -256,7 +289,7 @@ fn writeUsage(writer: *std.Io.Writer) !void {
         \\  fis check <file>
         \\  fis balance <file>
         \\  fis balance <file> --prefix <account> [--sort account|amount]
-        \\  fis inspect <file> [--id <id>] [--account <account>] [--from <date>] [--to <date>] [--tag <tag>]
+        \\  fis inspect <file> [--id <id>] [--account <account>] [--from <date>] [--to <date>] [--tag <tag>] [--running-balance]
         \\
     );
 }

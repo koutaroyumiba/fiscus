@@ -96,6 +96,47 @@ pub fn writeInspect(
     }
 }
 
+pub fn writeAccountRegister(
+    writer: *std.Io.Writer,
+    journal: *const fiscus.accounting.Journal,
+    report: *const fiscus.reports.AccountRegisterReport,
+) !void {
+    var entry_index: usize = 0;
+    while (entry_index < report.entries.items.len) {
+        if (entry_index != 0) {
+            try writer.writeByte('\n');
+        }
+
+        const transaction_index = report.entries.items[entry_index].transaction;
+        const transaction = journal.transactions.items[transaction_index];
+        const date = transaction.date.iso();
+        try writer.print("{s}", .{date[0..]});
+        if (transaction.narration) |narration| {
+            try writer.print("  {s}", .{narration});
+        }
+        try writer.writeByte('\n');
+
+        while (entry_index < report.entries.items.len and
+            report.entries.items[entry_index].transaction == transaction_index)
+        {
+            const entry = report.entries.items[entry_index];
+
+            try writer.writeAll("    change   ");
+            if (entry.change.value > 0) {
+                try writer.writeByte('+');
+            }
+            try journal.catalog.writeAmount(writer, entry.change);
+            try writer.writeByte('\n');
+
+            try writer.writeAll("    balance  ");
+            try journal.catalog.writeAmount(writer, entry.balance);
+            try writer.writeByte('\n');
+
+            entry_index += 1;
+        }
+    }
+}
+
 test "render inspected transaction in canonical form" {
     var journal = try fiscus.accounting.Journal.init(std.testing.allocator, 1, "personal");
     defer journal.deinit();
@@ -131,4 +172,23 @@ test "render inspected transaction in canonical form" {
         \\}
         \\
     , output.written());
+
+    var account_register = try fiscus.reports.calculateAccountRegister(
+        std.testing.allocator,
+        &journal,
+        bank,
+        .{},
+    );
+    defer account_register.deinit();
+
+    var register_output = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer register_output.deinit();
+    try writeAccountRegister(&register_output.writer, &journal, &account_register);
+
+    try std.testing.expectEqualStrings(
+        \\2026-01-15  Salary
+        \\    change   +100.00 AUD
+        \\    balance  100.00 AUD
+        \\
+    , register_output.written());
 }

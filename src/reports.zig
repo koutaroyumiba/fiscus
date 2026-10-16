@@ -39,6 +39,22 @@ pub const InspectReport = struct {
     }
 };
 
+pub const AccountRegisterEntry = struct {
+    transaction: accounting.TransactionIndex,
+    change: commodity.Amount,
+    balance: commodity.Amount,
+};
+
+pub const AccountRegisterReport = struct {
+    allocator: std.mem.Allocator,
+    entries: std.ArrayList(AccountRegisterEntry),
+
+    pub fn deinit(self: *AccountRegisterReport) void {
+        self.entries.deinit(self.allocator);
+        self.* = undefined;
+    }
+};
+
 pub const BalanceReport = struct {
     allocator: std.mem.Allocator,
     balances: std.ArrayList(Balance),
@@ -194,52 +210,9 @@ pub fn inspectTransactions(
     errdefer transactions.deinit(allocator);
 
     for (journal.transactions.items, 0..) |transaction, index| {
-        if (filter.id) |id| {
-            const transaction_id = transaction.id orelse continue;
-            if (!std.mem.eql(u8, transaction_id, id)) {
-                continue;
-            }
+        if (matchesInspectFilter(transaction, filter)) {
+            try transactions.append(allocator, @intCast(index));
         }
-
-        if (filter.from) |from| {
-            if (transaction.date.order(from) == .lt) {
-                continue;
-            }
-        }
-
-        if (filter.to) |to| {
-            if (transaction.date.order(to) == .gt) {
-                continue;
-            }
-        }
-
-        if (filter.account) |account| {
-            var found = false;
-            for (transaction.postings.items) |posting| {
-                if (posting.account == account) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                continue;
-            }
-        }
-
-        if (filter.tag) |tag| {
-            var found = false;
-            for (transaction.tags.items) |transaction_tag| {
-                if (std.mem.eql(u8, transaction_tag, tag)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                continue;
-            }
-        }
-
-        try transactions.append(allocator, @intCast(index));
     }
 
     std.mem.sort(
@@ -250,6 +223,140 @@ pub fn inspectTransactions(
     );
 
     return .{ .allocator = allocator, .transactions = transactions };
+}
+
+pub fn calculateAccountRegister(
+    allocator: std.mem.Allocator,
+    journal: *const accounting.Journal,
+    account_id: accounting.AccountId,
+    filter: InspectFilter,
+) (std.mem.Allocator.Error || ReportError)!AccountRegisterReport {
+    const account = journal.getAccount(account_id).?;
+
+    var entries: std.ArrayList(AccountRegisterEntry) = .empty;
+    errdefer entries.deinit(allocator);
+
+    var balances = std.AutoHashMap(commodity.CommodityId, i64).init(allocator);
+    defer balances.deinit();
+
+    var changes: std.ArrayList(commodity.Amount) = .empty;
+    defer changes.deinit(allocator);
+
+    var history = try inspectTransactions(allocator, journal, .{ .account = account_id });
+    defer history.deinit();
+
+    var display_filter = filter;
+    display_filter.account = account_id;
+
+    for (history.transactions.items) |transaction_index| {
+        const transaction = journal.transactions.items[transaction_index];
+        changes.clearRetainingCapacity();
+
+        for (transaction.postings.items) |posting| {
+            if (posting.account != account_id) {
+                continue;
+            }
+
+            const increases_normal_balance = switch (account.account_type) {
+                .asset, .expense => posting.direction == .debit,
+                .liability, .equity, .income => posting.direction == .credit,
+            };
+            const delta = if (increases_normal_balance)
+                posting.amount.value
+            else
+                std.math.negate(posting.amount.value) catch return error.Overflow;
+
+            var existing: ?*commodity.Amount = null;
+            for (changes.items) |*change| {
+                if (change.commodity == posting.amount.commodity) {
+                    existing = change;
+                    break;
+                }
+            }
+
+            if (existing) |change| {
+                change.value = std.math.add(i64, change.value, delta) catch return error.Overflow;
+            } else {
+                try changes.append(allocator, .{
+                    .value = delta,
+                    .commodity = posting.amount.commodity,
+                });
+            }
+        }
+
+        std.mem.sort(commodity.Amount, changes.items, {}, lessThanAmount);
+        const include = matchesInspectFilter(transaction, display_filter);
+
+        for (changes.items) |change| {
+            const result = try balances.getOrPut(change.commodity);
+            if (!result.found_existing) {
+                result.value_ptr.* = 0;
+            }
+            result.value_ptr.* = std.math.add(i64, result.value_ptr.*, change.value) catch return error.Overflow;
+
+            if (include) {
+                try entries.append(allocator, .{
+                    .transaction = transaction_index,
+                    .change = change,
+                    .balance = .{
+                        .value = result.value_ptr.*,
+                        .commodity = change.commodity,
+                    },
+                });
+            }
+        }
+    }
+
+    return .{ .allocator = allocator, .entries = entries };
+}
+
+fn matchesInspectFilter(transaction: accounting.Transaction, filter: InspectFilter) bool {
+    if (filter.id) |id| {
+        const transaction_id = transaction.id orelse return false;
+        if (!std.mem.eql(u8, transaction_id, id)) {
+            return false;
+        }
+    }
+
+    if (filter.from) |from| {
+        if (transaction.date.order(from) == .lt) {
+            return false;
+        }
+    }
+
+    if (filter.to) |to| {
+        if (transaction.date.order(to) == .gt) {
+            return false;
+        }
+    }
+
+    if (filter.account) |account| {
+        var found = false;
+        for (transaction.postings.items) |posting| {
+            if (posting.account == account) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return false;
+        }
+    }
+
+    if (filter.tag) |tag| {
+        var found = false;
+        for (transaction.tags.items) |transaction_tag| {
+            if (std.mem.eql(u8, transaction_tag, tag)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 fn removeZeroBalances(balances: *std.ArrayList(Balance)) void {
@@ -466,6 +573,17 @@ test "inspect transactions with structured filters and chronological ordering" {
     var unknown_id = try inspectTransactions(std.testing.allocator, &journal, .{ .id = "missing" });
     defer unknown_id.deinit();
     try std.testing.expectEqual(@as(usize, 0), unknown_id.transactions.items.len);
+
+    var account_register = try calculateAccountRegister(std.testing.allocator, &journal, bank, .{
+        .from = try time.Date.parse("2026-02-01"),
+        .tag = "food",
+    });
+    defer account_register.deinit();
+
+    try std.testing.expectEqual(@as(usize, 1), account_register.entries.items.len);
+    try std.testing.expectEqual(later, account_register.entries.items[0].transaction);
+    try std.testing.expectEqual(@as(i64, -1_000), account_register.entries.items[0].change.value);
+    try std.testing.expectEqual(@as(i64, 0), account_register.entries.items[0].balance.value);
 }
 
 test "report separate balances per commodity" {
