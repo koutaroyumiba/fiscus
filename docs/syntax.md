@@ -119,7 +119,7 @@ account asset:bank:example-bank:au:everyday commodity AUD
 
 An account may optionally declare a fixed commodity with `commodity SYMBOL`. The symbol must be a built-in or a declared commodity. Fixed-commodity accounts accept only that commodity and allow postings to omit it. Accounts without a fixed commodity may hold multiple commodities, and every posting to them must state its commodity explicitly.
 
-An account name consists of colon-separated components. Each component starts with a lowercase ASCII letter, may continue with lowercase letters, digits, `-`, or `_`, and it cannot be empty.
+An account name consists of colon-separated components. The first component must be one of the account types listed below. Each remaining component starts and ends with a lowercase ASCII letter or digit, may contain lowercase letters, digits, `-`, or `_`, and cannot be empty. This permits numeric components such as `2026`, but not components with dangling separators such as `stuff-` or `stuff_`.
 
 The first component determines the account type and must be one of:
 - asset

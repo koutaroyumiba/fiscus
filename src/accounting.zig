@@ -444,37 +444,39 @@ fn isValidAccountName(name: []const u8) bool {
     }
 
     var at_component_start = true;
+    var component_ends_with_alphanumeric = false;
     for (name) |char| {
         if (char == ':') {
-            if (at_component_start) {
+            if (at_component_start or !component_ends_with_alphanumeric) {
                 return false;
             }
 
             at_component_start = true;
+            component_ends_with_alphanumeric = false;
             continue;
         }
 
+        const is_lowercase_letter = char >= 'a' and char <= 'z';
+        const is_digit = char >= '0' and char <= '9';
+
         if (at_component_start) {
-            if (char < 'a' or char > 'z') {
+            if (!is_lowercase_letter and !is_digit) {
                 return false;
             }
 
             at_component_start = false;
+            component_ends_with_alphanumeric = true;
             continue;
         }
 
-        const valid =
-            (char >= 'a' and char <= 'z') or
-            (char >= '0' and char <= '9') or
-            char == '-' or
-            char == '_';
-
-        if (!valid) {
+        if (!is_lowercase_letter and !is_digit and char != '-' and char != '_') {
             return false;
         }
+
+        component_ends_with_alphanumeric = is_lowercase_letter or is_digit;
     }
 
-    return !at_component_start;
+    return !at_component_start and component_ends_with_alphanumeric;
 }
 
 fn isValidTag(tag: []const u8) bool {
@@ -500,8 +502,14 @@ fn isValidTag(tag: []const u8) bool {
 test "match account prefixes by component" {
     try std.testing.expect(isValidAccountPrefix("asset"));
     try std.testing.expect(isValidAccountPrefix("asset:bank"));
+    try std.testing.expect(isValidAccountPrefix("income:2026:stuff"));
+    try std.testing.expect(isValidAccountPrefix("asset:bank:1234"));
     try std.testing.expect(!isValidAccountPrefix("assets:bank"));
     try std.testing.expect(!isValidAccountPrefix("asset:Bank"));
+    try std.testing.expect(!isValidAccountPrefix("income:-2026"));
+    try std.testing.expect(!isValidAccountPrefix("income:_2026"));
+    try std.testing.expect(!isValidAccountPrefix("income:2026:stuff-"));
+    try std.testing.expect(!isValidAccountPrefix("income:2026:stuff_"));
 
     try std.testing.expect(matchesAccountPrefix("asset:bank", "asset:bank"));
     try std.testing.expect(matchesAccountPrefix("asset:bank:checking", "asset:bank"));
