@@ -47,11 +47,13 @@ pub fn run(
 
     switch (command) {
         .check => {
-            if (args.len != 3) {
+            if (args.len > 3) {
                 try writeUsage(stderr);
                 return 2;
             }
-            file_name = args[2];
+            if (args.len == 3) {
+                file_name = args[2];
+            }
         },
         .balance => {
             var index: usize = 2;
@@ -109,13 +111,12 @@ pub fn run(
             }
         },
         .inspect => {
-            if (args.len < 3) {
-                try writeUsage(stderr);
-                return 2;
+            var index: usize = 2;
+            if (index < args.len and !std.mem.startsWith(u8, args[index], "--")) {
+                file_name = args[index];
+                index += 1;
             }
-            file_name = args[2];
 
-            var index: usize = 3;
             while (index < args.len) {
                 if (std.mem.eql(u8, args[index], "--id")) {
                     if (index + 1 >= args.len or inspect_id != null) {
@@ -289,10 +290,10 @@ test {
 fn writeUsage(writer: *std.Io.Writer) !void {
     try writer.writeAll(
         \\usage:
-        \\  fis check <file>
+        \\  fis check [file]
         \\  fis balance [file]
         \\  fis balance [file] --prefix <account> [--sort account|amount]
-        \\  fis inspect <file> [--id <id>] [--account <account>] [--from <date>] [--to <date>] [--tag <tag>] [--running-balance]
+        \\  fis inspect [file] [--id <id>] [--account <account>] [--from <date>] [--to <date>] [--tag <tag>] [--running-balance]
         \\
     );
 }

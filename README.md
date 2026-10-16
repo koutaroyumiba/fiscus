@@ -28,7 +28,10 @@ It was a lot of fun to think about the syntax for this language and how to go ab
 ## Current Features (implemented)
 
 ```sh
-# validate a journal (a .fiscus file)
+# validate ./journal.fiscus
+fis check
+
+# or provide a journal explicitly
 fis check examples/personal.fiscus
 
 # print account balances (defaults to ./journal.fiscus)
@@ -43,7 +46,10 @@ fis balance examples/personal.fiscus --prefix asset:bank
 # show the largest child balances first
 fis balance examples/personal.fiscus --prefix asset:bank --sort amount
 
-# inspect transactions in chronological order
+# inspect transactions in ./journal.fiscus
+fis inspect
+
+# or provide a journal explicitly
 fis inspect examples/personal.fiscus
 
 # inspect a transaction by ID
