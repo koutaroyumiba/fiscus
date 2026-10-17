@@ -4,6 +4,7 @@ const accounting = @import("accounting.zig");
 const loader = @import("loader.zig");
 const reports = @import("reports.zig");
 const source_manager = @import("source_manager.zig");
+const time = @import("time.zig");
 const workspace = @import("workspace.zig");
 
 pub const BalanceQuery = union(enum) {
@@ -12,6 +13,14 @@ pub const BalanceQuery = union(enum) {
         value: []const u8,
         sort: reports.BalanceSort = .account,
     },
+};
+
+pub const InspectQuery = struct {
+    id: ?[]const u8 = null,
+    account: ?[]const u8 = null,
+    from: ?time.Date = null,
+    to: ?time.Date = null,
+    tag: ?[]const u8 = null,
 };
 
 pub const BalanceResult = union(enum) {
@@ -71,6 +80,29 @@ pub const Application = struct {
         };
     }
 
+    pub fn inspect(self: *const Application, query: InspectQuery) !reports.InspectReport {
+        const loaded_journal = self.journal() orelse return error.JournalUnavailable;
+
+        if (query.id) |id| {
+            if (loaded_journal.findTransactionById(id) == null) {
+                return error.UnknownTransaction;
+            }
+        }
+
+        const account_id = if (query.account) |account|
+            loaded_journal.findAccount(account) orelse return error.UnknownAccount
+        else
+            null;
+
+        return reports.inspectTransactions(self.allocator, loaded_journal, .{
+            .id = query.id,
+            .account = account_id,
+            .from = query.from,
+            .to = query.to,
+            .tag = query.tag,
+        });
+    }
+
     pub fn balances(self: *const Application, query: BalanceQuery) !BalanceResult {
         const loaded_journal = self.journal() orelse return error.JournalUnavailable;
 
@@ -126,6 +158,22 @@ test "load application and calculate balances" {
         },
         .all => return error.UnexpectedBalanceResult,
     }
+
+    var inspect_result = try application.inspect(.{
+        .id = "salary-2026-01",
+        .account = "asset:bank:nzd:everyday",
+    });
+    defer inspect_result.deinit();
+    try std.testing.expectEqual(@as(usize, 1), inspect_result.transactions.items.len);
+
+    try std.testing.expectError(
+        error.UnknownTransaction,
+        application.inspect(.{ .id = "missing" }),
+    );
+    try std.testing.expectError(
+        error.UnknownAccount,
+        application.inspect(.{ .account = "asset:missing" }),
+    );
 }
 
 test "queries require a valid journal" {

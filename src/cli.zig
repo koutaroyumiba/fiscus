@@ -232,34 +232,30 @@ pub fn run(
             }
         },
         .inspect => {
-            if (inspect_id) |id| {
-                if (journal.findTransactionById(id) == null) {
-                    try stderr.print("fis: unknown transaction ID '{s}'\n", .{id});
-                    return 1;
-                }
-            }
-
-            const account = if (inspect_account) |name|
-                journal.findAccount(name) orelse {
-                    try stderr.print("fis: unknown account '{s}'\n", .{name});
-                    return 1;
-                }
-            else
-                null;
-
-            const filter = fiscus.reports.InspectFilter{
-                .id = inspect_id,
-                .account = account,
-                .from = inspect_from,
-                .to = inspect_to,
-                .tag = inspect_tag,
-            };
-
             if (inspect_running_balance) {
+                if (inspect_id) |id| {
+                    if (journal.findTransactionById(id) == null) {
+                        try stderr.print("fis: unknown transaction ID '{s}'\n", .{id});
+                        return 1;
+                    }
+                }
+
+                const account = journal.findAccount(inspect_account.?) orelse {
+                    try stderr.print("fis: unknown account '{s}'\n", .{inspect_account.?});
+                    return 1;
+                };
+                const filter = fiscus.reports.InspectFilter{
+                    .id = inspect_id,
+                    .account = account,
+                    .from = inspect_from,
+                    .to = inspect_to,
+                    .tag = inspect_tag,
+                };
+
                 var report = fiscus.reports.calculateAccountRegister(
                     allocator,
                     journal,
-                    account.?,
+                    account,
                     filter,
                 ) catch |err| switch (err) {
                     error.OutOfMemory => return error.OutOfMemory,
@@ -272,7 +268,24 @@ pub fn run(
 
                 try render.writeAccountRegister(stdout, journal, &report);
             } else {
-                var report = try fiscus.reports.inspectTransactions(allocator, journal, filter);
+                var report = application.inspect(.{
+                    .id = inspect_id,
+                    .account = inspect_account,
+                    .from = inspect_from,
+                    .to = inspect_to,
+                    .tag = inspect_tag,
+                }) catch |err| switch (err) {
+                    error.OutOfMemory => return error.OutOfMemory,
+                    error.JournalUnavailable => unreachable,
+                    error.UnknownTransaction => {
+                        try stderr.print("fis: unknown transaction ID '{s}'\n", .{inspect_id.?});
+                        return 1;
+                    },
+                    error.UnknownAccount => {
+                        try stderr.print("fis: unknown account '{s}'\n", .{inspect_account.?});
+                        return 1;
+                    },
+                };
                 defer report.deinit();
 
                 try render.writeInspect(stdout, journal, &report);
