@@ -189,6 +189,37 @@ const Model = struct {
         return true;
     }
 
+    fn formatFilteredTotals(
+        self: *const Model,
+        allocator: std.mem.Allocator,
+    ) std.mem.Allocator.Error![]const u8 {
+        const report = switch (self.balance_result) {
+            .all => unreachable,
+            .prefix => |prefix_report| prefix_report,
+        };
+
+        var output = std.Io.Writer.Allocating.init(allocator);
+        defer output.deinit();
+
+        output.writer.writeAll("Filtered total: ") catch return error.OutOfMemory;
+        if (report.amounts.items.len == 0) {
+            output.writer.writeAll("no balances") catch return error.OutOfMemory;
+        }
+
+        for (report.amounts.items, 0..) |amount, index| {
+            if (index != 0) {
+                output.writer.writeAll(" | ") catch return error.OutOfMemory;
+            }
+
+            self.journal.catalog.writeAmount(&output.writer, amount) catch |err| switch (err) {
+                error.WriteFailed => return error.OutOfMemory,
+                error.UnknownCommodity => unreachable,
+            };
+        }
+
+        return output.toOwnedSlice();
+    }
+
     fn typeErasedDrawFn(
         ptr: *anyopaque,
         ctx: vxfw.DrawContext,
@@ -211,13 +242,15 @@ const Model = struct {
             .{ .width = prefix_width, .height = 1 },
         );
 
-        const list_height = max_size.height -| 5;
+        const has_filter = self.current_prefix != null;
+        const list_row: u16 = if (has_filter) 6 else 5;
+        const list_height = max_size.height -| list_row;
         const list_context = ctx.withConstraints(.{}, .{
             .width = max_size.width,
             .height = list_height,
         });
 
-        const child_count: usize = if (self.status == null) 5 else 6;
+        const child_count: usize = 5 + @as(usize, @intFromBool(has_filter)) + @as(usize, @intFromBool(self.status != null));
         const children = try ctx.arena.alloc(vxfw.SubSurface, child_count);
         children[0] = .{
             .origin = .{ .row = 0, .col = 0 },
@@ -235,18 +268,34 @@ const Model = struct {
             .origin = .{ .row = 3, .col = 0 },
             .surface = try current_prefix.draw(ctx),
         };
-        children[4] = .{
-            .origin = .{ .row = 5, .col = 0 },
-            .surface = try self.list.draw(list_context),
-        };
+        var child_index: usize = 4;
+        if (has_filter) {
+            const totals_text: vxfw.Text = .{
+                .text = try self.formatFilteredTotals(ctx.arena),
+                .softwrap = false,
+                .overflow = .ellipsis,
+                .width_basis = .parent,
+            };
+            children[child_index] = .{
+                .origin = .{ .row = 4, .col = 0 },
+                .surface = try totals_text.draw(ctx),
+            };
+            child_index += 1;
+        }
 
         if (self.status) |status| {
             const status_text: vxfw.Text = .{ .text = status };
-            children[5] = .{
-                .origin = .{ .row = 4, .col = 0 },
+            children[child_index] = .{
+                .origin = .{ .row = list_row - 1, .col = 0 },
                 .surface = try status_text.draw(ctx),
             };
+            child_index += 1;
         }
+
+        children[child_index] = .{
+            .origin = .{ .row = list_row, .col = 0 },
+            .surface = try self.list.draw(list_context),
+        };
 
         return .{
             .size = max_size,
