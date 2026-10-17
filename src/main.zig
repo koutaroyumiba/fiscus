@@ -12,11 +12,7 @@ pub fn main(init: std.process.Init) !void {
         return;
     }
 
-    if (std.mem.eql(u8, args[1], "tui")) {
-        if (args.len > 3) {
-            return error.InvalidArguments;
-        }
-
+    if (std.mem.eql(u8, args[1], "tui") and args.len <= 3) {
         const path = if (args.len == 3) args[2] else "journal.fiscus";
         try tui.run(init, path);
         return;

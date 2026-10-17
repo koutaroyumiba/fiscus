@@ -3,11 +3,51 @@ const std = @import("std");
 const fiscus = @import("fiscus");
 const vaxis = @import("vaxis");
 
+const BalanceRow = @import("balance.widget.zig").BalanceRow;
+
 const vxfw = vaxis.vxfw;
 
 const Model = struct {
     journal: *const fiscus.accounting.Journal,
     report: *const fiscus.reports.BalanceReport,
+
+    rows: []BalanceRow,
+    row_widgets: []vxfw.Widget,
+    list: vxfw.ListView,
+
+    fn init(
+        allocator: std.mem.Allocator,
+        journal: *const fiscus.accounting.Journal,
+        report: *const fiscus.reports.BalanceReport,
+    ) !Model {
+        const rows = try allocator.alloc(BalanceRow, report.balances.items.len);
+        errdefer allocator.free(rows);
+
+        const row_widgets = try allocator.alloc(vxfw.Widget, rows.len);
+        errdefer allocator.free(row_widgets);
+
+        for (rows, report.balances.items, row_widgets) |*row, balance, *row_widget| {
+            row.* = .{ .journal = journal, .balance = balance };
+            row_widget.* = row.widget();
+        }
+
+        return .{
+            .journal = journal,
+            .report = report,
+            .rows = rows,
+            .row_widgets = row_widgets,
+            .list = .{
+                .children = .{ .slice = row_widgets },
+                .item_count = @intCast(row_widgets.len),
+            },
+        };
+    }
+
+    fn deinit(self: *Model, allocator: std.mem.Allocator) void {
+        allocator.free(self.row_widgets);
+        allocator.free(self.rows);
+        self.* = undefined;
+    }
 
     pub fn widget(self: *Model) vxfw.Widget {
         return .{
@@ -17,7 +57,9 @@ const Model = struct {
         };
     }
 
-    fn typeErasedEventHandler(_: *anyopaque, ctx: *vxfw.EventContext, event: vxfw.Event) anyerror!void {
+    fn typeErasedEventHandler(ptr: *anyopaque, ctx: *vxfw.EventContext, event: vxfw.Event) anyerror!void {
+        const self: *Model = @ptrCast(@alignCast(ptr));
+
         switch (event) {
             .key_press => |key| {
                 if (key.matches('q', .{}) or key.matches('c', .{ .ctrl = true })) {
@@ -27,33 +69,32 @@ const Model = struct {
             },
             else => {},
         }
+
+        return self.list.handleEvent(ctx, event);
     }
 
     fn typeErasedDrawFn(ptr: *anyopaque, ctx: vxfw.DrawContext) std.mem.Allocator.Error!vxfw.Surface {
         const self: *Model = @ptrCast(@alignCast(ptr));
         const max_size = ctx.max.size();
-        const available_rows: usize = if (max_size.height > 2) @intCast(max_size.height - 2) else 0;
-
-        const visible_count = @min(available_rows, self.report.balances.items.len);
 
         const title_text = try ctx.arena.print("Fiscus - {s}", .{self.journal.name});
         const text1: vxfw.Text = .{ .text = title_text };
 
-        const children = try ctx.arena.alloc(vxfw.SubSurface, visible_count + 1);
+        const list_height = max_size.height -| 2;
+        const list_context = ctx.withConstraints(.{}, .{
+            .width = max_size.width,
+            .height = list_height,
+        });
+
+        const children = try ctx.arena.alloc(vxfw.SubSurface, 2);
         children[0] = .{
             .origin = .{ .row = 0, .col = 0 },
             .surface = try text1.draw(ctx),
         };
-
-        for (self.report.balances.items[0..visible_count], 0..) |balance, index| {
-            const row_text = try self.formatBalance(ctx.arena, balance);
-            const text: vxfw.Text = .{ .text = row_text };
-
-            children[index + 1] = .{
-                .origin = .{ .row = @intCast(index + 2), .col = 0 },
-                .surface = try text.draw(ctx),
-            };
-        }
+        children[1] = .{
+            .origin = .{ .row = 2, .col = 0 },
+            .surface = try self.list.draw(list_context),
+        };
 
         return .{
             .size = max_size,
@@ -61,26 +102,6 @@ const Model = struct {
             .buffer = &.{},
             .children = children,
         };
-    }
-
-    fn formatBalance(
-        self: *const Model,
-        allocator: std.mem.Allocator,
-        balance: fiscus.reports.Balance,
-    ) std.mem.Allocator.Error![]const u8 {
-        const account = self.journal.getAccount(balance.account).?;
-
-        var output = std.Io.Writer.Allocating.init(allocator);
-        defer output.deinit();
-
-        output.writer.print("{s:<45} ", .{account.name}) catch return error.OutOfMemory;
-
-        self.journal.catalog.writeAmount(&output.writer, balance.amount) catch |err| switch (err) {
-            error.WriteFailed => return error.OutOfMemory,
-            error.UnknownCommodity => unreachable,
-        };
-
-        return output.toOwnedSlice();
     }
 };
 
@@ -105,7 +126,8 @@ pub fn run(init: std.process.Init, path: []const u8) !void {
     var app: vxfw.App = try .init(io, allocator, init.environ_map, &buffer);
     defer app.deinit();
 
-    var model: Model = .{ .journal = journal, .report = report };
+    var model = try Model.init(allocator, journal, report);
+    defer model.deinit(allocator);
 
     try app.run(model.widget(), .{});
 }
