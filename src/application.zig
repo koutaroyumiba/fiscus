@@ -1,7 +1,9 @@
 const std = @import("std");
 
 const accounting = @import("accounting.zig");
+const loader = @import("loader.zig");
 const reports = @import("reports.zig");
+const source_manager = @import("source_manager.zig");
 const workspace = @import("workspace.zig");
 
 pub const BalanceQuery = union(enum) {
@@ -24,6 +26,11 @@ pub const BalanceResult = union(enum) {
 
         self.* = undefined;
     }
+};
+
+pub const LoadFailure = struct {
+    failure: loader.Failure,
+    sources: *const source_manager.SourceManager,
 };
 
 pub const Application = struct {
@@ -51,6 +58,16 @@ pub const Application = struct {
         return switch (self.loaded_workspace.result) {
             .journal => |*captured_journal| captured_journal,
             .failure => null,
+        };
+    }
+
+    pub fn loadFailure(self: *const Application) ?LoadFailure {
+        return switch (self.loaded_workspace.result) {
+            .journal => null,
+            .failure => |failure| .{
+                .failure = failure,
+                .sources = &self.loaded_workspace.sources,
+            },
         };
     }
 
@@ -121,5 +138,10 @@ test "queries require a valid journal" {
     defer application.deinit();
 
     try std.testing.expect(application.journal() == null);
+
+    const load_failure = application.loadFailure() orelse return error.ExpectedLoadFailure;
+    _ = load_failure.failure;
+    try std.testing.expect(load_failure.sources.files.items.len > 0);
+
     try std.testing.expectError(error.JournalUnavailable, application.balances(.all));
 }

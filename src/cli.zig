@@ -186,101 +186,101 @@ pub fn run(
         },
     }
 
-    var workspace = fiscus.workspace.load(allocator, io, std.Io.Dir.cwd(), file_name) catch |err| {
+    var application = fiscus.application.Application.load(
+        allocator,
+        io,
+        std.Io.Dir.cwd(),
+        file_name,
+    ) catch |err| {
         try stderr.print("fis: cannot load '{s}': {s}\n", .{ file_name, @errorName(err) });
         return 1;
     };
-    defer workspace.deinit();
+    defer application.deinit();
 
-    return switch (workspace.result) {
-        .journal => |journal| {
-            switch (command) {
-                .check => {
-                    try stdout.print("{s}: valid\n", .{file_name});
+    const journal = application.journal() orelse {
+        const load_failure = application.loadFailure() orelse unreachable;
+        const diagnostic = fiscus.diagnostics.fromLoadFailure(load_failure.failure);
+        try fiscus.diagnostics.writeFromManager(stderr, load_failure.sources, diagnostic);
+        return 1;
+    };
+
+    switch (command) {
+        .check => {
+            try stdout.print("{s}: valid\n", .{file_name});
+        },
+        .balance => {
+            const query: fiscus.application.BalanceQuery = if (prefix) |value|
+                .{ .prefix = .{ .value = value, .sort = sort } }
+            else
+                .all;
+
+            var result = application.balances(query) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.JournalUnavailable,
+                error.InvalidAccountPrefix,
+                => unreachable,
+                error.Overflow => {
+                    try stderr.writeAll("fis: account balance overflow\n");
+                    return 1;
                 },
-                .balance => {
-                    if (prefix) |value| {
-                        var report = fiscus.reports.calculatePrefixBalances(allocator, &journal, value, sort) catch |err| switch (err) {
-                            error.OutOfMemory => return error.OutOfMemory,
-                            error.InvalidAccountPrefix => unreachable,
-                            error.Overflow => {
-                                try stderr.writeAll("fis: account balance overflow\n");
-                                return 1;
-                            },
-                        };
-                        defer report.deinit();
+            };
+            defer result.deinit();
 
-                        try render.writePrefixBalances(stdout, &journal, value, &report);
-                    } else {
-                        var report = fiscus.reports.calculateBalances(allocator, &journal) catch |err| switch (err) {
-                            error.OutOfMemory => return error.OutOfMemory,
-                            error.Overflow => {
-                                try stderr.writeAll("fis: account balance overflow\n");
-                                return 1;
-                            },
-                        };
-                        defer report.deinit();
-
-                        try render.writeBalances(stdout, &journal, &report);
-                    }
-                },
-                .inspect => {
-                    if (inspect_id) |id| {
-                        if (journal.findTransactionById(id) == null) {
-                            try stderr.print("fis: unknown transaction ID '{s}'\n", .{id});
-                            return 1;
-                        }
-                    }
-
-                    const account = if (inspect_account) |name|
-                        journal.findAccount(name) orelse {
-                            try stderr.print("fis: unknown account '{s}'\n", .{name});
-                            return 1;
-                        }
-                    else
-                        null;
-
-                    const filter = fiscus.reports.InspectFilter{
-                        .id = inspect_id,
-                        .account = account,
-                        .from = inspect_from,
-                        .to = inspect_to,
-                        .tag = inspect_tag,
-                    };
-
-                    if (inspect_running_balance) {
-                        var report = fiscus.reports.calculateAccountRegister(
-                            allocator,
-                            &journal,
-                            account.?,
-                            filter,
-                        ) catch |err| switch (err) {
-                            error.OutOfMemory => return error.OutOfMemory,
-                            error.Overflow => {
-                                try stderr.writeAll("fis: account running balance overflow\n");
-                                return 1;
-                            },
-                        };
-                        defer report.deinit();
-
-                        try render.writeAccountRegister(stdout, &journal, &report);
-                    } else {
-                        var report = try fiscus.reports.inspectTransactions(allocator, &journal, filter);
-                        defer report.deinit();
-
-                        try render.writeInspect(stdout, &journal, &report);
-                    }
-                },
+            switch (result) {
+                .all => |*report| try render.writeBalances(stdout, journal, report),
+                .prefix => |*report| try render.writePrefixBalances(stdout, journal, prefix.?, report),
+            }
+        },
+        .inspect => {
+            if (inspect_id) |id| {
+                if (journal.findTransactionById(id) == null) {
+                    try stderr.print("fis: unknown transaction ID '{s}'\n", .{id});
+                    return 1;
+                }
             }
 
-            return 0;
+            const account = if (inspect_account) |name|
+                journal.findAccount(name) orelse {
+                    try stderr.print("fis: unknown account '{s}'\n", .{name});
+                    return 1;
+                }
+            else
+                null;
+
+            const filter = fiscus.reports.InspectFilter{
+                .id = inspect_id,
+                .account = account,
+                .from = inspect_from,
+                .to = inspect_to,
+                .tag = inspect_tag,
+            };
+
+            if (inspect_running_balance) {
+                var report = fiscus.reports.calculateAccountRegister(
+                    allocator,
+                    journal,
+                    account.?,
+                    filter,
+                ) catch |err| switch (err) {
+                    error.OutOfMemory => return error.OutOfMemory,
+                    error.Overflow => {
+                        try stderr.writeAll("fis: account running balance overflow\n");
+                        return 1;
+                    },
+                };
+                defer report.deinit();
+
+                try render.writeAccountRegister(stdout, journal, &report);
+            } else {
+                var report = try fiscus.reports.inspectTransactions(allocator, journal, filter);
+                defer report.deinit();
+
+                try render.writeInspect(stdout, journal, &report);
+            }
         },
-        .failure => |failure| {
-            const diagnostic = fiscus.diagnostics.fromLoadFailure(failure);
-            try fiscus.diagnostics.writeFromManager(stderr, &workspace.sources, diagnostic);
-            return 1;
-        },
-    };
+    }
+
+    return 0;
 }
 
 test {
