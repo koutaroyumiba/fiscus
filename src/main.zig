@@ -1,5 +1,14 @@
 const std = @import("std");
 
+const vaxis = @import("vaxis");
+
+fn panicHandler(message: []const u8, return_addr: ?usize) noreturn {
+    vaxis.recover();
+    std.debug.defaultPanic(message, return_addr);
+}
+
+pub const panic = std.debug.FullPanic(panicHandler);
+
 const cli = @import("cli.zig");
 const tui = @import("tui/main.zig");
 
