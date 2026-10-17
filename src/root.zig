@@ -1,4 +1,5 @@
 pub const accounting = @import("accounting.zig");
+pub const application = @import("application.zig");
 pub const commodity = @import("commodity.zig");
 pub const decoder = @import("decoder.zig");
 pub const diagnostics = @import("diagnostics.zig");
@@ -11,6 +12,7 @@ pub const workspace = @import("workspace.zig");
 
 test {
     _ = accounting;
+    _ = application;
     _ = commodity;
     _ = decoder;
     _ = diagnostics;
