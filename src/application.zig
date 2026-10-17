@@ -23,6 +23,14 @@ pub const InspectQuery = struct {
     tag: ?[]const u8 = null,
 };
 
+pub const AccountRegisterQuery = struct {
+    account: []const u8,
+    id: ?[]const u8 = null,
+    from: ?time.Date = null,
+    to: ?time.Date = null,
+    tag: ?[]const u8 = null,
+};
+
 pub const BalanceResult = union(enum) {
     all: reports.BalanceReport,
     prefix: reports.PrefixBalanceReport,
@@ -103,6 +111,35 @@ pub const Application = struct {
         });
     }
 
+    pub fn accountRegister(
+        self: *const Application,
+        query: AccountRegisterQuery,
+    ) !reports.AccountRegisterReport {
+        const loaded_journal = self.journal() orelse return error.JournalUnavailable;
+
+        if (query.id) |id| {
+            if (loaded_journal.findTransactionById(id) == null) {
+                return error.UnknownTransaction;
+            }
+        }
+
+        const account_id = loaded_journal.findAccount(query.account) orelse
+            return error.UnknownAccount;
+
+        return reports.calculateAccountRegister(
+            self.allocator,
+            loaded_journal,
+            account_id,
+            .{
+                .id = query.id,
+                .account = account_id,
+                .from = query.from,
+                .to = query.to,
+                .tag = query.tag,
+            },
+        );
+    }
+
     pub fn balances(self: *const Application, query: BalanceQuery) !BalanceResult {
         const loaded_journal = self.journal() orelse return error.JournalUnavailable;
 
@@ -173,6 +210,28 @@ test "load application and calculate balances" {
     try std.testing.expectError(
         error.UnknownAccount,
         application.inspect(.{ .account = "asset:missing" }),
+    );
+
+    var register_result = try application.accountRegister(.{
+        .account = "asset:bank:nzd:everyday",
+        .id = "salary-2026-01",
+    });
+    defer register_result.deinit();
+
+    try std.testing.expectEqual(@as(usize, 1), register_result.entries.items.len);
+    try std.testing.expectEqual(@as(i64, 300_000), register_result.entries.items[0].change.value);
+    try std.testing.expect(register_result.entries.items[0].balance.value > 300_000);
+
+    try std.testing.expectError(
+        error.UnknownTransaction,
+        application.accountRegister(.{
+            .account = "asset:bank:nzd:everyday",
+            .id = "missing",
+        }),
+    );
+    try std.testing.expectError(
+        error.UnknownAccount,
+        application.accountRegister(.{ .account = "asset:missing" }),
     );
 }
 

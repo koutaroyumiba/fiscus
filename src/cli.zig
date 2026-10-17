@@ -233,32 +233,23 @@ pub fn run(
         },
         .inspect => {
             if (inspect_running_balance) {
-                if (inspect_id) |id| {
-                    if (journal.findTransactionById(id) == null) {
-                        try stderr.print("fis: unknown transaction ID '{s}'\n", .{id});
-                        return 1;
-                    }
-                }
-
-                const account = journal.findAccount(inspect_account.?) orelse {
-                    try stderr.print("fis: unknown account '{s}'\n", .{inspect_account.?});
-                    return 1;
-                };
-                const filter = fiscus.reports.InspectFilter{
+                var report = application.accountRegister(.{
+                    .account = inspect_account.?,
                     .id = inspect_id,
-                    .account = account,
                     .from = inspect_from,
                     .to = inspect_to,
                     .tag = inspect_tag,
-                };
-
-                var report = fiscus.reports.calculateAccountRegister(
-                    allocator,
-                    journal,
-                    account,
-                    filter,
-                ) catch |err| switch (err) {
+                }) catch |err| switch (err) {
                     error.OutOfMemory => return error.OutOfMemory,
+                    error.JournalUnavailable => unreachable,
+                    error.UnknownTransaction => {
+                        try stderr.print("fis: unknown transaction ID '{s}'\n", .{inspect_id.?});
+                        return 1;
+                    },
+                    error.UnknownAccount => {
+                        try stderr.print("fis: unknown account '{s}'\n", .{inspect_account.?});
+                        return 1;
+                    },
                     error.Overflow => {
                         try stderr.writeAll("fis: account running balance overflow\n");
                         return 1;
