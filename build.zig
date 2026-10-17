@@ -8,30 +8,17 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
-    // === CLI EXE
-    const exe = b.addExecutable(.{
-        .name = "fis",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "fiscus", .module = mod },
-            },
-        }),
-    });
-
-    // === TUI EXE
     const vaxis = b.dependency("vaxis", .{
         .target = target,
         .optimize = optimize,
     });
     const vaxis_mod = vaxis.module("vaxis");
 
-    const tui_exe = b.addExecutable(.{
-        .name = "fis-tui",
+    // === CLI EXE
+    const exe = b.addExecutable(.{
+        .name = "fis",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/tui/main.zig"),
+            .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{
@@ -42,17 +29,17 @@ pub fn build(b: *std.Build) void {
     });
 
     b.installArtifact(exe);
-    b.installArtifact(tui_exe);
 
     const run_step = b.step("run", "Run the CLI");
-    const tui_step = b.step("tui", "Run the TUI");
-
     const run_cmd = b.addRunArtifact(exe);
-    const tui_cmd = b.addRunArtifact(tui_exe);
-
     run_step.dependOn(&run_cmd.step);
     run_cmd.step.dependOn(b.getInstallStep());
     run_cmd.addPassthruArgs();
+
+    const tui_step = b.step("tui", "Run the TUI");
+    const tui_cmd = b.addRunArtifact(exe);
+
+    tui_cmd.addArg("tui");
 
     tui_step.dependOn(&tui_cmd.step);
     tui_cmd.step.dependOn(b.getInstallStep());

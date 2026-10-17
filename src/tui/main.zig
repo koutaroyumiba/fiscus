@@ -84,12 +84,9 @@ const Model = struct {
     }
 };
 
-pub fn main(init: std.process.Init) !void {
+pub fn run(init: std.process.Init, path: []const u8) !void {
     const io = init.io;
     const allocator = init.gpa;
-
-    const args = try init.minimal.args.toSlice(init.arena.allocator());
-    const path = if (args.len >= 2) args[1] else "journal.fiscus";
 
     var application = try fiscus.application.Application.load(allocator, io, std.Io.Dir.cwd(), path);
     defer application.deinit();

@@ -1,10 +1,26 @@
 const std = @import("std");
 
 const cli = @import("cli.zig");
+const tui = @import("tui/main.zig");
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const args = try init.minimal.args.toSlice(init.arena.allocator());
+
+    if (args.len == 1) {
+        try tui.run(init, "journal.fiscus");
+        return;
+    }
+
+    if (std.mem.eql(u8, args[1], "tui")) {
+        if (args.len > 3) {
+            return error.InvalidArguments;
+        }
+
+        const path = if (args.len == 3) args[2] else "journal.fiscus";
+        try tui.run(init, path);
+        return;
+    }
 
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_file_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
