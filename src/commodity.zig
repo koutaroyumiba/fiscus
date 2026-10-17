@@ -193,25 +193,36 @@ pub const Catalog = struct {
         };
     }
 
+    pub fn writeAmountValue(self: *const Self, writer: *std.Io.Writer, amount: Amount) !void {
+        const item = self.get(amount.commodity) orelse return error.UnknownCommodity;
+        try writeScaledValue(writer, amount.value, item.scale);
+    }
+
     pub fn writeAmount(self: *const Self, writer: *std.Io.Writer, amount: Amount) !void {
-        const commodity = self.get(amount.commodity) orelse return error.UnknownCommodity;
-        const magnitude: u64 = @abs(amount.value);
+        const item = self.get(amount.commodity) orelse return error.UnknownCommodity;
+        try writeScaledValue(writer, amount.value, item.scale);
+        try writer.print(" {s}", .{item.symbol});
+    }
+
+    // === PRIVATE HELPERS ===
+    fn writeScaledValue(writer: *std.Io.Writer, value: i64, scale: u8) !void {
+        const magnitude: u64 = @abs(value);
 
         var factor: u64 = 1;
-        for (0..@as(usize, commodity.scale)) |_| {
+        for (0..@as(usize, scale)) |_| {
             factor *= 10;
         }
 
         const whole = magnitude / factor;
         const fractional = magnitude % factor;
 
-        if (amount.value < 0) {
+        if (value < 0) {
             try writer.writeByte('-');
         }
 
         try writer.print("{d}", .{whole});
 
-        if (commodity.scale > 0) {
+        if (scale > 0) {
             try writer.writeByte('.');
 
             var divisor = factor / 10;
@@ -220,11 +231,8 @@ pub const Catalog = struct {
                 try writer.writeByte('0' + digit);
             }
         }
-
-        try writer.print(" {s}", .{commodity.symbol});
     }
 
-    // === PRIVATE HELPERS ===
     fn isValidSymbol(symbol: []const u8) bool {
         if (symbol.len == 0 or symbol.len > 32) {
             return false;
@@ -390,6 +398,19 @@ test "format exact commodity amounts" {
 
     try catalog.writeAmount(&output.writer, .{ .value = 1025, .commodity = aud });
     try std.testing.expectEqualStrings("10.25 AUD", output.written());
+}
+
+test "format amount value without commodity symbol" {
+    var catalog = try Catalog.init(std.testing.allocator);
+    defer catalog.deinit();
+
+    const aud = catalog.find("AUD").?;
+
+    var output = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer output.deinit();
+
+    try catalog.writeAmountValue(&output.writer, .{ .value = 1025, .commodity = aud });
+    try std.testing.expectEqualStrings("10.25", output.written());
 }
 
 test "format negative fractional commodity amount" {

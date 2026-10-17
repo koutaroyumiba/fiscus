@@ -20,19 +20,26 @@ pub const BalanceRow = struct {
         const self: *BalanceRow = @ptrCast(@alignCast(ptr));
 
         const account = self.journal.getAccount(self.balance.account).?;
+        const commodity = self.journal.catalog.get(self.balance.amount.commodity).?;
 
-        var output = std.Io.Writer.Allocating.init(ctx.arena);
-        defer output.deinit();
+        var value_output = std.Io.Writer.Allocating.init(ctx.arena);
+        defer value_output.deinit();
 
-        output.writer.print("{s:<45} ", .{account.name}) catch return error.OutOfMemory;
-
-        self.journal.catalog.writeAmount(&output.writer, self.balance.amount) catch |err| switch (err) {
+        self.journal.catalog.writeAmountValue(&value_output.writer, self.balance.amount) catch |err| switch (err) {
             error.WriteFailed => return error.OutOfMemory,
             error.UnknownCommodity => unreachable,
         };
 
+        var row_output = std.Io.Writer.Allocating.init(ctx.arena);
+        defer row_output.deinit();
+
+        row_output.writer.print(
+            "{s:<45} {s:>18}  {s}",
+            .{ account.name, value_output.written(), commodity.symbol },
+        ) catch return error.OutOfMemory;
+
         const text: vxfw.Text = .{
-            .text = output.written(),
+            .text = row_output.written(),
             .softwrap = false,
             .width_basis = .parent,
         };
