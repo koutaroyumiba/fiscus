@@ -38,7 +38,7 @@ pub const Catalog = struct {
         try self.addBuiltinCurrency("JPY", 0);
         try self.addBuiltinCurrency("NZD", 2);
         try self.addBuiltinCurrency("USD", 2);
-        try self.addBuiltinCurrnecy("VND", 2);
+        try self.addBuiltinCurrency("VND", 2);
 
         return self;
     }
@@ -59,7 +59,7 @@ pub const Catalog = struct {
 
     pub fn addCommodity(self: *Catalog, new_commodity: Commodity) !CommodityId {
         // validate first
-        if (isValidCommoditySymbol(new_commodity.symbol)) return error.InvalidSymbol;
+        if (!isValidCommoditySymbol(new_commodity.symbol)) return error.InvalidSymbol;
         if (new_commodity.scale > MAX_SCALE) return error.InvalidScale;
         if (self.ids_by_symbol.contains(new_commodity.symbol)) return error.DuplicateSymbol;
         if (new_commodity.name) |name| {
@@ -96,7 +96,7 @@ pub const Catalog = struct {
 
     // private because should only be called in `init`
     fn addBuiltinCurrency(self: *Catalog, symbol: []const u8, scale: u8) Allocator.Error!void {
-        _ = self.add(.{
+        _ = self.addCommodity(.{
             .kind = .currency,
             .symbol = symbol,
             .scale = scale,
@@ -151,7 +151,7 @@ pub fn writeScaledValue(writer: *std.Io.Writer, value: i64, scale: u8) !void {
     }
 
     const whole = magnitude / factor;
-    const fractional = magnitude % 10;
+    const fractional = magnitude % factor;
 
     if (value < 0) {
         try writer.writeByte('-');
