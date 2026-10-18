@@ -5,15 +5,23 @@ const mod = struct {
     const commodity = @import("commodity.zig");
 };
 
+const Amount = mod.commodity.Amount;
 const CommodityId = mod.commodity.CommodityId;
 const Commodity = mod.commodity.Commodity;
 
-const CatalogError = error{
+pub const CatalogError = error{
     DuplicateSymbol,
     InvalidSymbol,
     InvalidScale,
     InvalidName,
     TooManyCommodities,
+};
+
+pub const ParseAmountError = error{
+    UnknownCommodity,
+    InvalidAmount,
+    TooMuchPrecision,
+    Overflow,
 };
 
 // CONSTANTS
@@ -38,7 +46,7 @@ pub const Catalog = struct {
         try self.addBuiltinCurrency("JPY", 0);
         try self.addBuiltinCurrency("NZD", 2);
         try self.addBuiltinCurrency("USD", 2);
-        try self.addBuiltinCurrency("VND", 2);
+        try self.addBuiltinCurrency("VND", 0);
 
         return self;
     }
@@ -55,6 +63,20 @@ pub const Catalog = struct {
 
         self.commodities.deinit(self.allocator);
         self.* = undefined;
+    }
+
+    pub fn idFromSymbol(self: *const Catalog, symbol: []const u8) ?CommodityId {
+        return self.ids_by_symbol.get(symbol);
+    }
+
+    pub fn commodityFromId(self: *const Catalog, id: CommodityId) ?Commodity {
+        const index = std.math.cast(usize, id) orelse return null;
+
+        if (index >= self.commodities.items.len) {
+            return null;
+        }
+
+        return self.commodities.items[index];
     }
 
     pub fn addCommodity(self: *Catalog, new_commodity: Commodity) !CommodityId {
@@ -112,13 +134,38 @@ pub const Catalog = struct {
             => unreachable,
         };
     }
+
+    pub fn parseAmount(self: *const Catalog, number: []const u8, symbol: []const u8) ParseAmountError!Amount {
+        const commodity_id = self.idFromSymbol(symbol) orelse return error.UnknownCommodity;
+        const commodity = self.commodityFromId(commodity_id).?;
+        const value = try parseDecimal(number, commodity.scale);
+
+        return .{
+            .value = value,
+            .commodity = commodity_id,
+        };
+    }
+
+    // WRITERS
+    pub fn writeAmount(self: *const Catalog, writer: *std.Io.Writer, amount: Amount) !void {
+        const commodity = self.commodityFromId(amount.commodity) orelse return error.UnknownCommodity;
+        try writeScaledValue(writer, amount.value, commodity.scale);
+        try writer.print(" {s}", .{commodity.symbol});
+    }
+
+    pub fn writeAmountValue(self: *const Catalog, writer: *std.Io.Writer, amount: Amount) !void {
+        const commodity = self.commodityFromId(amount.commodity) orelse return error.UnknownCommodity;
+        try writeScaledValue(writer, amount.value, commodity.scale);
+    }
 };
+
+// === HELPER FUNCTIONS
 
 // invariants for commodity symbols:
 // - 0 < symbol.len <= 32
 // - starts with a uppercase letter
 // - followed by any of [A-Z][0-9][._-]
-pub fn isValidCommoditySymbol(symbol: []const u8) bool {
+fn isValidCommoditySymbol(symbol: []const u8) bool {
     if (symbol.len == 0 or symbol.len > 32) {
         return false;
     }
@@ -138,6 +185,43 @@ pub fn isValidCommoditySymbol(symbol: []const u8) bool {
     }
 
     return true;
+}
+
+fn parseDecimal(text: []const u8, scale: u8) !i64 {
+    if (text.len == 0) return error.InvalidAmount;
+
+    var value: i64 = 0;
+    var seen_decimal = false;
+    var fractional_digits: u8 = 0;
+    var digits: usize = 0;
+
+    for (text) |char| {
+        if (char == '.') {
+            if (seen_decimal or digits == 0) return error.InvalidAmount;
+
+            seen_decimal = true;
+            continue;
+        }
+
+        if (char < '0' or char > '9') return error.InvalidAmount;
+
+        if (seen_decimal) {
+            if (fractional_digits == scale) return error.TooMuchPrecision;
+
+            fractional_digits += 1;
+        }
+
+        value = try std.math.mul(i64, value, 10);
+        value = try std.math.add(i64, value, @as(i64, char - '0'));
+        digits += 1;
+    }
+
+    if (seen_decimal and fractional_digits == 0) return error.InvalidAmount;
+    while (fractional_digits < scale) : (fractional_digits += 1) {
+        value = try std.math.mul(i64, value, 10);
+    }
+
+    return value;
 }
 
 // === WRITERS ===
@@ -167,8 +251,6 @@ pub fn writeScaledValue(writer: *std.Io.Writer, value: i64, scale: u8) !void {
         }
     }
 }
-
-// === PRIVATE HELPERS ===
 
 fn isUpper(char: u8) bool {
     return char >= 'A' and char <= 'Z';
