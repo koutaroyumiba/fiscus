@@ -1,6 +1,9 @@
 const std = @import("std");
 
-const AmountError = @import("errors.zig").AmountError;
+pub const AmountError = error{
+    CommodityMismatch,
+    Overflow,
+};
 
 /// Type of Commodity
 pub const Kind = enum {
