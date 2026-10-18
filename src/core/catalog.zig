@@ -35,6 +35,8 @@ pub const Catalog = struct {
         try self.addBuiltinCurrency("NZD", 2);
         try self.addBuiltinCurrency("USD", 2);
         try self.addBuiltinCurrnecy("VND", 2);
+
+        return self;
     }
 
     pub fn deinit(self: *Catalog) void {
