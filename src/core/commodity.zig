@@ -65,6 +65,6 @@ pub const Amount = struct {
             return error.CommodityMismatch;
         }
 
-        return self.math.order(self.value, other.value);
+        return std.math.order(self.value, other.value);
     }
 };
