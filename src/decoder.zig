@@ -2,7 +2,7 @@ const std = @import("std");
 
 const accounting = @import("accounting.zig");
 const ast = @import("lang/ast.zig");
-const commodity = @import("commodity.zig");
+const core = @import("core/root.zig");
 const source = @import("lang/source.zig");
 const time = @import("time.zig");
 
@@ -150,14 +150,14 @@ pub const Decoder = struct {
             const scale = std.fmt.parseInt(u8, comm.scale.lexeme, 10) catch {
                 return self.fail(.invalid_commodity_scale, comm.scale.span);
             };
-            const kind: commodity.Kind = switch (comm.kind) {
+            const kind: core.CommodityKind = switch (comm.kind) {
                 .currency => .currency,
                 .security => .security,
                 .custom => .custom,
             };
             const name = if (comm.name) |token| token.lexeme else null;
 
-            _ = journal.catalog.add(.{
+            _ = journal.catalog.addCommodity(.{
                 .symbol = comm.symbol.lexeme,
                 .kind = kind,
                 .scale = scale,
@@ -179,8 +179,8 @@ pub const Decoder = struct {
         for (accounts) |account| {
             _ = try self.inferAccountType(account);
 
-            const account_commodity: ?commodity.CommodityId = if (account.commodity) |token|
-                journal.catalog.find(token.lexeme) orelse
+            const account_commodity: ?core.CommodityId = if (account.commodity) |token|
+                journal.catalog.idFromSymbol(token.lexeme) orelse
                     return self.fail(.unknown_account_commodity, token.span)
             else
                 null;
@@ -385,7 +385,7 @@ pub const Decoder = struct {
         const amount_commodity = if (posting.commodity) |token|
             token.lexeme
         else if (account_details.commodity) |commodity_id|
-            journal.catalog.get(commodity_id).?.symbol
+            journal.catalog.commodityFromId(commodity_id).?.symbol
         else
             return self.fail(.missing_posting_commodity, posting.amount.span);
 
@@ -399,7 +399,7 @@ pub const Decoder = struct {
             };
         };
 
-        const valuation: ?commodity.Amount = if (posting.valuation) |expression|
+        const valuation: ?core.Amount = if (posting.valuation) |expression|
             journal.catalog.parseAmount(expression.amount.lexeme, expression.commodity.lexeme) catch |err| {
                 return switch (err) {
                     error.UnknownCommodity => self.fail(.unknown_valuation_commodity, expression.commodity.span),

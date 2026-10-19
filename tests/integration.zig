@@ -55,7 +55,7 @@ test "decode fixed account commodities and short transactions" {
 
     switch (result) {
         .journal => |journal| {
-            const nzd = journal.catalog.find("NZD") orelse return error.ExpectedCommodity;
+            const nzd = journal.catalog.idFromSymbol("NZD") orelse return error.ExpectedCommodity;
             try std.testing.expectEqual(nzd, journal.accounts.items[0].commodity.?);
             try std.testing.expectEqual(nzd, journal.transactions.items[0].postings.items[0].amount.commodity);
             try std.testing.expectEqual(fiscus.accounting.Direction.debit, journal.transactions.items[0].postings.items[0].direction);
@@ -240,14 +240,14 @@ test "decode exact total posting valuation" {
 
             try std.testing.expectEqualStrings(
                 "NZX.AIR",
-                journal.catalog.get(posting.amount.commodity).?.symbol,
+                journal.catalog.commodityFromId(posting.amount.commodity).?.symbol,
             );
             try std.testing.expectEqual(@as(i64, 10_000_000), posting.amount.value);
 
             const valuation = posting.valuation.?;
             try std.testing.expectEqualStrings(
                 "NZD",
-                journal.catalog.get(valuation.commodity).?.symbol,
+                journal.catalog.commodityFromId(valuation.commodity).?.symbol,
             );
             try std.testing.expectEqual(@as(i64, 780), valuation.value);
 
@@ -351,9 +351,9 @@ test "load activity coverage workspace" {
             try std.testing.expectEqual(@as(usize, 25), journal.transactions.items.len);
             try journal.validate();
 
-            const air_id = journal.catalog.find("NZX.AIR") orelse return error.ExpectedCommodity;
-            const air = journal.catalog.get(air_id).?;
-            try std.testing.expectEqual(fiscus.commodity.Kind.security, air.kind);
+            const air_id = journal.catalog.idFromSymbol("NZX.AIR") orelse return error.ExpectedCommodity;
+            const air = journal.catalog.commodityFromId(air_id).?;
+            try std.testing.expectEqual(fiscus.commodity.CommodityKind.security, air.kind);
             try std.testing.expectEqual(@as(u8, 6), air.scale);
             try std.testing.expectEqualStrings("Air New Zealand", air.name.?);
 

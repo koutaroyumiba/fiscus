@@ -1,5 +1,6 @@
 const std = @import("std");
-const commodity = @import("commodity.zig");
+
+const core = @import("core/root.zig");
 const time = @import("time.zig");
 
 pub const AccountId = u32;
@@ -16,7 +17,7 @@ pub const AccountType = enum {
 pub const Account = struct {
     name: []const u8,
     account_type: AccountType,
-    commodity: ?commodity.CommodityId,
+    commodity: ?core.CommodityId,
 };
 
 pub const Direction = enum { debit, credit };
@@ -24,15 +25,15 @@ pub const Direction = enum { debit, credit };
 pub const Posting = struct {
     direction: Direction,
     account: AccountId,
-    amount: commodity.Amount,
-    valuation: ?commodity.Amount,
+    amount: core.Amount,
+    valuation: ?core.Amount,
 };
 
 pub const NewPosting = struct {
     direction: Direction,
     account: AccountId,
-    amount: commodity.Amount,
-    valuation: ?commodity.Amount = null,
+    amount: core.Amount,
+    valuation: ?core.Amount = null,
 };
 
 pub const Transaction = struct {
@@ -85,7 +86,7 @@ pub const Journal = struct {
     version: u32,
     name: []const u8,
 
-    catalog: commodity.Catalog,
+    catalog: core.Catalog,
 
     accounts: std.ArrayList(Account),
     account_ids_by_name: std.StringHashMap(AccountId),
@@ -96,7 +97,7 @@ pub const Journal = struct {
     const Self = @This();
 
     pub fn init(allocator: std.mem.Allocator, version: u32, name: []const u8) !Self {
-        var catalog = try commodity.Catalog.init(allocator);
+        var catalog = try core.Catalog.init(allocator);
         errdefer catalog.deinit();
 
         const owned_name = try allocator.dupe(u8, name);
@@ -156,7 +157,7 @@ pub const Journal = struct {
     pub fn addAccountWithCommodity(
         self: *Self,
         name: []const u8,
-        account_commodity: ?commodity.CommodityId,
+        account_commodity: ?core.CommodityId,
     ) !AccountId {
         if (!isValidAccountName(name)) {
             return error.InvalidAccountName;
@@ -171,7 +172,7 @@ pub const Journal = struct {
         }
 
         if (account_commodity) |commodity_id| {
-            if (self.catalog.get(commodity_id) == null) {
+            if (self.catalog.commodityFromId(commodity_id) == null) {
                 return error.UnknownCommodity;
             }
         }
@@ -320,7 +321,7 @@ pub const Journal = struct {
             return error.UnknownAccount;
         };
 
-        if (self.catalog.get(new_posting.amount.commodity) == null) {
+        if (self.catalog.commodityFromId(new_posting.amount.commodity) == null) {
             return error.UnknownCommodity;
         }
 
@@ -335,7 +336,7 @@ pub const Journal = struct {
         }
 
         if (new_posting.valuation) |valuation| {
-            if (self.catalog.get(valuation.commodity) == null) {
+            if (self.catalog.commodityFromId(valuation.commodity) == null) {
                 return error.UnknownCommodity;
             }
 
@@ -587,10 +588,11 @@ test "validate stock purchase using total valuation" {
     var journal = try Journal.init(std.testing.allocator, 1, "investments");
     defer journal.deinit();
 
-    _ = try journal.catalog.add(.{
-        .symbol = "NZX.AIR",
+    _ = try journal.catalog.addCommodity(.{
         .kind = .security,
+        .symbol = "NZX.AIR",
         .scale = 6,
+        .name = null,
     });
 
     const shares = try journal.addAccount("asset:broker:shares");
@@ -663,10 +665,11 @@ test "reject invalid and redundant posting valuations" {
     var journal = try Journal.init(std.testing.allocator, 1, "investments");
     defer journal.deinit();
 
-    _ = try journal.catalog.add(.{
-        .symbol = "NZX.AIR",
+    _ = try journal.catalog.addCommodity(.{
         .kind = .security,
+        .symbol = "NZX.AIR",
         .scale = 6,
+        .name = null,
     });
 
     const shares = try journal.addAccount("asset:broker:shares");
@@ -674,7 +677,7 @@ test "reject invalid and redundant posting valuations" {
         .date = try time.Date.parse("2026-02-02"),
     });
     const quantity = try journal.catalog.parseAmount("10.000000", "NZX.AIR");
-    const nzd = journal.catalog.find("NZD").?;
+    const nzd = journal.catalog.idFromSymbol("NZD").?;
 
     try std.testing.expectError(
         error.InvalidPostingValuation,
@@ -701,10 +704,11 @@ test "reject unvalued mixed commodities and unbalanced valuations" {
     var journal = try Journal.init(std.testing.allocator, 1, "personal");
     defer journal.deinit();
 
-    _ = try journal.catalog.add(.{
-        .symbol = "NZX.AIR",
+    _ = try journal.catalog.addCommodity(.{
         .kind = .security,
+        .symbol = "NZX.AIR",
         .scale = 6,
+        .name = null,
     });
 
     const shares = try journal.addAccount("asset:broker:shares");
