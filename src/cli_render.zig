@@ -55,7 +55,7 @@ pub fn writeInspect(
         }
 
         const transaction = journal.transactions.items[transaction_index];
-        const date = transaction.date.iso();
+        const date = transaction.date.toIsoString();
         try writer.print("txn {s}", .{date[0..]});
         if (transaction.narration) |narration| {
             try writer.print(" \"{s}\"", .{narration});
@@ -109,7 +109,7 @@ pub fn writeAccountRegister(
 
         const transaction_index = report.entries.items[entry_index].transaction;
         const transaction = journal.transactions.items[transaction_index];
-        const date = transaction.date.iso();
+        const date = transaction.date.toIsoString();
         try writer.print("{s}", .{date[0..]});
         if (transaction.narration) |narration| {
             try writer.print("  {s}", .{narration});
@@ -145,7 +145,7 @@ test "render inspected transaction in canonical form" {
     const income = try journal.addAccount("income:salary");
     const amount = try journal.catalog.parseAmount("100.00", "AUD");
     const transaction = try journal.addTransaction(.{
-        .date = try fiscus.time.Date.parse("2026-01-15"),
+        .date = try fiscus.core.Date.parse("2026-01-15"),
         .id = "salary-1",
         .narration = "Salary",
         .note = "Monthly pay",

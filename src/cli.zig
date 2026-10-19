@@ -40,8 +40,8 @@ pub fn run(
 
     var inspect_id: ?[]const u8 = null;
     var inspect_account: ?[]const u8 = null;
-    var inspect_from: ?fiscus.time.Date = null;
-    var inspect_to: ?fiscus.time.Date = null;
+    var inspect_from: ?fiscus.core.Date = null;
+    var inspect_to: ?fiscus.core.Date = null;
     var inspect_tag: ?[]const u8 = null;
     var inspect_running_balance = false;
 
@@ -138,7 +138,7 @@ pub fn run(
                         return 2;
                     }
                     const value = args[index + 1];
-                    inspect_from = fiscus.time.Date.parse(value) catch {
+                    inspect_from = fiscus.core.Date.parse(value) catch {
                         try stderr.print("fis: invalid date '{s}' for --from\n", .{value});
                         return 2;
                     };
@@ -149,7 +149,7 @@ pub fn run(
                         return 2;
                     }
                     const value = args[index + 1];
-                    inspect_to = fiscus.time.Date.parse(value) catch {
+                    inspect_to = fiscus.core.Date.parse(value) catch {
                         try stderr.print("fis: invalid date '{s}' for --to\n", .{value});
                         return 2;
                     };
