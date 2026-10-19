@@ -4,7 +4,6 @@ const accounting = @import("accounting.zig");
 const ast = @import("lang/ast.zig");
 const core = @import("core/root.zig");
 const source = @import("lang/source.zig");
-const time = @import("time.zig");
 
 pub const FailureKind = enum {
     invalid_version,
@@ -288,7 +287,7 @@ pub const Decoder = struct {
     }
 
     fn decodeTransaction(self: *Self, journal: *accounting.Journal, transaction: ast.TransactionStmt) !void {
-        const date = time.Date.parse(transaction.date.lexeme) catch {
+        const date = core.Date.parse(transaction.date.lexeme) catch {
             return self.fail(.invalid_date, transaction.date.span);
         };
         const narration = if (transaction.narration) |token| token.lexeme else null;

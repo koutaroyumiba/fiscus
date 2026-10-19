@@ -2,7 +2,6 @@ const std = @import("std");
 
 const accounting = @import("accounting.zig");
 const core = @import("core/root.zig");
-const time = @import("time.zig");
 
 pub const ReportError = error{Overflow};
 
@@ -24,8 +23,8 @@ pub const Balance = struct {
 pub const InspectFilter = struct {
     id: ?[]const u8 = null,
     account: ?accounting.AccountId = null,
-    from: ?time.Date = null,
-    to: ?time.Date = null,
+    from: ?core.Date = null,
+    to: ?core.Date = null,
     tag: ?[]const u8 = null,
 };
 
@@ -433,7 +432,7 @@ test "calculate natural accounting balances" {
     const opening = try journal.addAccount("equity:opening-balances");
 
     const transaction = try journal.addTransaction(.{
-        .date = try time.Date.parse("2026-01-01"),
+        .date = try core.Date.parse("2026-01-01"),
         .narration = "Opening balance",
     });
     const amount = try journal.catalog.parseAmount("1000.00", "AUD");
@@ -478,7 +477,7 @@ test "aggregate balances by component-aware account prefix" {
 
     for (entries, 0..) |entry, index| {
         const transaction = try journal.addTransaction(.{
-            .date = try time.Date.init(2026, .jan, @intCast(index + 1)),
+            .date = try core.Date.init(2026, .jan, @intCast(index + 1)),
         });
         try journal.addPosting(transaction, .{
             .direction = .debit,
@@ -529,7 +528,7 @@ test "inspect transactions with structured filters and chronological ordering" {
     const amount = try journal.catalog.parseAmount("10.00", "AUD");
 
     const later = try journal.addTransaction(.{
-        .date = try time.Date.parse("2026-02-01"),
+        .date = try core.Date.parse("2026-02-01"),
         .id = "groceries-1",
         .narration = "Groceries",
     });
@@ -538,7 +537,7 @@ test "inspect transactions with structured filters and chronological ordering" {
     try journal.addPosting(later, .{ .direction = .credit, .account = bank, .amount = amount });
 
     const earlier = try journal.addTransaction(.{
-        .date = try time.Date.parse("2026-01-01"),
+        .date = try core.Date.parse("2026-01-01"),
         .narration = "Opening balance",
     });
     try journal.addPosting(earlier, .{ .direction = .debit, .account = bank, .amount = amount });
@@ -555,8 +554,8 @@ test "inspect transactions with structured filters and chronological ordering" {
     var filtered = try inspectTransactions(std.testing.allocator, &journal, .{
         .id = "groceries-1",
         .account = groceries,
-        .from = try time.Date.parse("2026-02-01"),
-        .to = try time.Date.parse("2026-02-01"),
+        .from = try core.Date.parse("2026-02-01"),
+        .to = try core.Date.parse("2026-02-01"),
         .tag = "food",
     });
     defer filtered.deinit();
@@ -575,7 +574,7 @@ test "inspect transactions with structured filters and chronological ordering" {
     try std.testing.expectEqual(@as(usize, 0), unknown_id.transactions.items.len);
 
     var account_register = try calculateAccountRegister(std.testing.allocator, &journal, bank, .{
-        .from = try time.Date.parse("2026-02-01"),
+        .from = try core.Date.parse("2026-02-01"),
         .tag = "food",
     });
     defer account_register.deinit();
@@ -594,7 +593,7 @@ test "report separate balances per commodity" {
     const opening = try journal.addAccount("equity:opening-balances");
 
     const aud_transaction = try journal.addTransaction(.{
-        .date = try time.Date.parse("2026-01-01"),
+        .date = try core.Date.parse("2026-01-01"),
         .narration = "AUD opening balance",
     });
     const aud = try journal.catalog.parseAmount("100.00", "AUD");
@@ -611,7 +610,7 @@ test "report separate balances per commodity" {
     });
 
     const usd_transaction = try journal.addTransaction(.{
-        .date = try time.Date.parse("2026-01-01"),
+        .date = try core.Date.parse("2026-01-01"),
         .narration = "USD opening balance",
     });
     const usd = try journal.catalog.parseAmount("50.00", "USD");

@@ -1,10 +1,10 @@
 const std = @import("std");
 
 const accounting = @import("accounting.zig");
+const core = @import("core/root.zig");
 const loader = @import("loader.zig");
 const reports = @import("reports.zig");
 const source_manager = @import("source_manager.zig");
-const time = @import("time.zig");
 const workspace = @import("workspace.zig");
 
 pub const BalanceQuery = union(enum) {
@@ -18,16 +18,16 @@ pub const BalanceQuery = union(enum) {
 pub const InspectQuery = struct {
     id: ?[]const u8 = null,
     account: ?[]const u8 = null,
-    from: ?time.Date = null,
-    to: ?time.Date = null,
+    from: ?core.Date = null,
+    to: ?core.Date = null,
     tag: ?[]const u8 = null,
 };
 
 pub const AccountRegisterQuery = struct {
     account: []const u8,
     id: ?[]const u8 = null,
-    from: ?time.Date = null,
-    to: ?time.Date = null,
+    from: ?core.Date = null,
+    to: ?core.Date = null,
     tag: ?[]const u8 = null,
 };
 

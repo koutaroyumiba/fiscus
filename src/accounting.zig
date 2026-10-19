@@ -1,7 +1,6 @@
 const std = @import("std");
 
 const core = @import("core/root.zig");
-const time = @import("time.zig");
 
 pub const AccountId = u32;
 pub const TransactionIndex = u32;
@@ -38,7 +37,7 @@ pub const NewPosting = struct {
 
 pub const Transaction = struct {
     id: ?[]const u8,
-    date: time.Date,
+    date: core.Date,
     narration: ?[]const u8,
     note: ?[]const u8,
     tags: std.ArrayList([]const u8),
@@ -46,7 +45,7 @@ pub const Transaction = struct {
 };
 
 pub const NewTransaction = struct {
-    date: time.Date,
+    date: core.Date,
     id: ?[]const u8 = null,
     narration: ?[]const u8 = null,
     note: ?[]const u8 = null,
@@ -532,7 +531,7 @@ test "construct basic journal" {
 
     const bank = try journal.addAccount("asset:bank");
     const transaction = try journal.addTransaction(.{
-        .date = try time.Date.init(2026, .jan, 1),
+        .date = try core.Date.init(2026, .jan, 1),
         .id = "opening",
     });
     const amount = try journal.catalog.parseAmount("1000.00", "AUD");
@@ -568,7 +567,7 @@ test "reject unbalanced transaction" {
     const bank = try journal.addAccount("asset:bank");
     const groceries = try journal.addAccount("expense:groceries");
 
-    const transaction = try journal.addTransaction(.{ .date = try time.Date.init(2026, .jan, 17), .narration = "Groceries" });
+    const transaction = try journal.addTransaction(.{ .date = try core.Date.init(2026, .jan, 17), .narration = "Groceries" });
 
     try journal.addPosting(transaction, .{
         .direction = .debit,
@@ -599,7 +598,7 @@ test "validate stock purchase using total valuation" {
     const bank = try journal.addAccount("asset:bank");
     const fees = try journal.addAccount("expense:broker-fees");
     const transaction = try journal.addTransaction(.{
-        .date = try time.Date.parse("2026-02-02"),
+        .date = try core.Date.parse("2026-02-02"),
         .narration = "Buy shares",
     });
 
@@ -638,7 +637,7 @@ test "validate currency conversion using total valuation" {
     const nzd_bank = try journal.addAccount("asset:bank:nzd");
     const fees = try journal.addAccount("expense:currency-fees");
     const transaction = try journal.addTransaction(.{
-        .date = try time.Date.parse("2026-02-01"),
+        .date = try core.Date.parse("2026-02-01"),
     });
 
     try journal.addPosting(transaction, .{
@@ -674,7 +673,7 @@ test "reject invalid and redundant posting valuations" {
 
     const shares = try journal.addAccount("asset:broker:shares");
     const transaction = try journal.addTransaction(.{
-        .date = try time.Date.parse("2026-02-02"),
+        .date = try core.Date.parse("2026-02-02"),
     });
     const quantity = try journal.catalog.parseAmount("10.000000", "NZX.AIR");
     const nzd = journal.catalog.idFromSymbol("NZD").?;
@@ -715,7 +714,7 @@ test "reject unvalued mixed commodities and unbalanced valuations" {
     const bank = try journal.addAccount("asset:bank");
 
     const mixed = try journal.addTransaction(.{
-        .date = try time.Date.parse("2026-02-01"),
+        .date = try core.Date.parse("2026-02-01"),
     });
     try journal.addPosting(mixed, .{
         .direction = .debit,
@@ -730,7 +729,7 @@ test "reject unvalued mixed commodities and unbalanced valuations" {
     try std.testing.expectError(error.MultipleCommodities, journal.validateTransaction(mixed));
 
     const unbalanced = try journal.addTransaction(.{
-        .date = try time.Date.parse("2026-02-02"),
+        .date = try core.Date.parse("2026-02-02"),
     });
     try journal.addPosting(unbalanced, .{
         .direction = .debit,
