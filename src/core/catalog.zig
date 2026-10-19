@@ -255,3 +255,115 @@ pub fn writeScaledValue(writer: *std.Io.Writer, value: i64, scale: u8) !void {
 fn isUpper(char: u8) bool {
     return char >= 'A' and char <= 'Z';
 }
+
+// === TESTS ===
+
+test "parse exact commodity amounts" {
+    var catalog = try Catalog.init(std.testing.allocator);
+    defer catalog.deinit();
+
+    const aud = catalog.idFromSymbol("AUD").?;
+
+    try std.testing.expectEqual(
+        Amount{ .value = 1000, .commodity = aud },
+        try catalog.parseAmount("10", "AUD"),
+    );
+    try std.testing.expectEqual(
+        Amount{ .value = 1020, .commodity = aud },
+        try catalog.parseAmount("10.2", "AUD"),
+    );
+    try std.testing.expectEqual(
+        Amount{ .value = 1025, .commodity = aud },
+        try catalog.parseAmount("10.25", "AUD"),
+    );
+    try std.testing.expectEqual(
+        Amount{ .value = 1, .commodity = aud },
+        try catalog.parseAmount("0.01", "AUD"),
+    );
+}
+
+test "reject invalid commodity amounts" {
+    var catalog = try Catalog.init(std.testing.allocator);
+    defer catalog.deinit();
+
+    try std.testing.expectError(error.InvalidAmount, catalog.parseAmount("", "AUD"));
+    try std.testing.expectError(error.InvalidAmount, catalog.parseAmount(".50", "AUD"));
+    try std.testing.expectError(error.InvalidAmount, catalog.parseAmount("10.", "AUD"));
+    try std.testing.expectError(error.InvalidAmount, catalog.parseAmount("-10.00", "AUD"));
+    try std.testing.expectError(error.InvalidAmount, catalog.parseAmount("1e3", "AUD"));
+    try std.testing.expectError(error.TooMuchPrecision, catalog.parseAmount("10.005", "AUD"));
+    try std.testing.expectError(error.UnknownCommodity, catalog.parseAmount("10.00", "BTC"));
+
+    // overflow
+    try std.testing.expectError(error.Overflow, catalog.parseAmount("92233720368547758.08", "AUD"));
+}
+
+test "format exact commodity amounts" {
+    var catalog = try Catalog.init(std.testing.allocator);
+    defer catalog.deinit();
+
+    const aud = catalog.idFromSymbol("AUD").?;
+
+    var output = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer output.deinit();
+
+    try catalog.writeAmount(&output.writer, .{ .value = 1025, .commodity = aud });
+    try std.testing.expectEqualStrings("10.25 AUD", output.written());
+}
+
+test "format negative fractional commodity amount" {
+    var catalog = try Catalog.init(std.testing.allocator);
+    defer catalog.deinit();
+
+    const aud = catalog.idFromSymbol("AUD").?;
+
+    var output = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer output.deinit();
+
+    try catalog.writeAmount(&output.writer, .{ .value = -1, .commodity = aud });
+    try std.testing.expectEqualStrings("-0.01 AUD", output.written());
+}
+
+test "format amount value without commodity symbol" {
+    var catalog = try Catalog.init(std.testing.allocator);
+    defer catalog.deinit();
+
+    const aud = catalog.idFromSymbol("AUD").?;
+
+    var output = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer output.deinit();
+
+    try catalog.writeAmountValue(&output.writer, .{ .value = 1025, .commodity = aud });
+    try std.testing.expectEqualStrings("10.25", output.written());
+}
+
+test "format minimum integer amount" {
+    var catalog = try Catalog.init(std.testing.allocator);
+    defer catalog.deinit();
+
+    const aud = catalog.idFromSymbol("AUD").?;
+
+    var output = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer output.deinit();
+
+    try catalog.writeAmount(&output.writer, .{ .value = std.math.minInt(i64), .commodity = aud });
+    try std.testing.expectEqualStrings("-92233720368547758.08 AUD", output.written());
+}
+
+test "add a custom named security" {
+    var catalog = try Catalog.init(std.testing.allocator);
+    defer catalog.deinit();
+
+    const id = try catalog.addCommodity(.{
+        .kind = .security,
+        .symbol = "NZX.AIR",
+        .scale = 6,
+        .name = "Air New Zealand",
+    });
+    const security = catalog.commodityFromId(id).?;
+
+    try std.testing.expectEqual(mod.commodity.Kind.security, security.kind);
+    try std.testing.expectEqualStrings("NZX.AIR", security.symbol);
+    try std.testing.expectEqual(@as(u8, 6), security.scale);
+    try std.testing.expectEqualStrings("Air New Zealand", security.name.?);
+}

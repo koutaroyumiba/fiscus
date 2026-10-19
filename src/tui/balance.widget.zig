@@ -20,7 +20,7 @@ pub const BalanceRow = struct {
         const self: *BalanceRow = @ptrCast(@alignCast(ptr));
 
         const account = self.journal.getAccount(self.balance.account).?;
-        const commodity = self.journal.catalog.get(self.balance.amount.commodity).?;
+        const commodity = self.journal.catalog.commodityFromId(self.balance.amount.commodity).?;
 
         var value_output = std.Io.Writer.Allocating.init(ctx.arena);
         defer value_output.deinit();

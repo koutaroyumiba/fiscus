@@ -1,6 +1,6 @@
 pub const accounting = @import("accounting.zig");
 pub const application = @import("application.zig");
-pub const commodity = @import("commodity.zig");
+pub const commodity = @import("core/root.zig");
 pub const decoder = @import("decoder.zig");
 pub const diagnostics = @import("diagnostics.zig");
 pub const lang = @import("lang/root.zig");

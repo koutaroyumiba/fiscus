@@ -1,14 +1,14 @@
 const std = @import("std");
 
 const accounting = @import("accounting.zig");
-const commodity = @import("commodity.zig");
+const core = @import("core/root.zig");
 const time = @import("time.zig");
 
 pub const ReportError = error{Overflow};
 
 const BalanceKey = struct {
     account: accounting.AccountId,
-    commodity: commodity.CommodityId,
+    commodity: core.CommodityId,
 };
 
 pub const BalanceSort = enum {
@@ -18,7 +18,7 @@ pub const BalanceSort = enum {
 
 pub const Balance = struct {
     account: accounting.AccountId,
-    amount: commodity.Amount,
+    amount: core.Amount,
 };
 
 pub const InspectFilter = struct {
@@ -41,8 +41,8 @@ pub const InspectReport = struct {
 
 pub const AccountRegisterEntry = struct {
     transaction: accounting.TransactionIndex,
-    change: commodity.Amount,
-    balance: commodity.Amount,
+    change: core.Amount,
+    balance: core.Amount,
 };
 
 pub const AccountRegisterReport = struct {
@@ -67,7 +67,7 @@ pub const BalanceReport = struct {
 
 pub const PrefixBalanceReport = struct {
     allocator: std.mem.Allocator,
-    amounts: std.ArrayList(commodity.Amount),
+    amounts: std.ArrayList(core.Amount),
     balances: std.ArrayList(Balance),
 
     pub fn deinit(self: *PrefixBalanceReport) void {
@@ -146,13 +146,13 @@ pub fn calculatePrefixBalances(
         return error.InvalidAccountPrefix;
     }
 
-    var amounts: std.ArrayList(commodity.Amount) = .empty;
+    var amounts: std.ArrayList(core.Amount) = .empty;
     errdefer amounts.deinit(allocator);
 
     var balances: std.ArrayList(Balance) = .empty;
     errdefer balances.deinit(allocator);
 
-    var indices = std.AutoHashMap(commodity.CommodityId, usize).init(allocator);
+    var indices = std.AutoHashMap(core.CommodityId, usize).init(allocator);
     defer indices.deinit();
 
     var all_balances = try calculateBalances(allocator, journal);
@@ -186,7 +186,7 @@ pub fn calculatePrefixBalances(
         ) catch return error.Overflow;
     }
 
-    std.mem.sort(commodity.Amount, amounts.items, {}, lessThanAmount);
+    std.mem.sort(core.Amount, amounts.items, {}, lessThanAmount);
     std.mem.sort(
         Balance,
         balances.items,
@@ -236,10 +236,10 @@ pub fn calculateAccountRegister(
     var entries: std.ArrayList(AccountRegisterEntry) = .empty;
     errdefer entries.deinit(allocator);
 
-    var balances = std.AutoHashMap(commodity.CommodityId, i64).init(allocator);
+    var balances = std.AutoHashMap(core.CommodityId, i64).init(allocator);
     defer balances.deinit();
 
-    var changes: std.ArrayList(commodity.Amount) = .empty;
+    var changes: std.ArrayList(core.Amount) = .empty;
     defer changes.deinit(allocator);
 
     var history = try inspectTransactions(allocator, journal, .{ .account = account_id });
@@ -266,7 +266,7 @@ pub fn calculateAccountRegister(
             else
                 std.math.negate(posting.amount.value) catch return error.Overflow;
 
-            var existing: ?*commodity.Amount = null;
+            var existing: ?*core.Amount = null;
             for (changes.items) |*change| {
                 if (change.commodity == posting.amount.commodity) {
                     existing = change;
@@ -284,7 +284,7 @@ pub fn calculateAccountRegister(
             }
         }
 
-        std.mem.sort(commodity.Amount, changes.items, {}, lessThanAmount);
+        std.mem.sort(core.Amount, changes.items, {}, lessThanAmount);
         const include = matchesInspectFilter(transaction, display_filter);
 
         for (changes.items) |change| {
@@ -382,7 +382,7 @@ fn lessThanBalance(_: void, left: Balance, right: Balance) bool {
     return left.amount.commodity < right.amount.commodity;
 }
 
-fn lessThanAmount(_: void, left: commodity.Amount, right: commodity.Amount) bool {
+fn lessThanAmount(_: void, left: core.Amount, right: core.Amount) bool {
     return left.commodity < right.commodity;
 }
 
@@ -469,7 +469,7 @@ test "aggregate balances by component-aware account prefix" {
     const larger_aud = try journal.catalog.parseAmount("200.00", "AUD");
     const usd = try journal.catalog.parseAmount("25.00", "USD");
 
-    const entries = [_]struct { account: accounting.AccountId, amount: commodity.Amount }{
+    const entries = [_]struct { account: accounting.AccountId, amount: core.Amount }{
         .{ .account = checking, .amount = aud },
         .{ .account = savings, .amount = larger_aud },
         .{ .account = checking, .amount = usd },
