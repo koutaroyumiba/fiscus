@@ -58,8 +58,8 @@ test "decode fixed account commodities and short transactions" {
             const nzd = journal.catalog.idFromSymbol("NZD") orelse return error.ExpectedCommodity;
             try std.testing.expectEqual(nzd, journal.accounts.items[0].commodity.?);
             try std.testing.expectEqual(nzd, journal.transactions.items[0].postings.items[0].amount.commodity);
-            try std.testing.expectEqual(fiscus.accounting.Direction.debit, journal.transactions.items[0].postings.items[0].direction);
-            try std.testing.expectEqual(fiscus.accounting.Direction.credit, journal.transactions.items[0].postings.items[1].direction);
+            try std.testing.expectEqual(fiscus.ledger.Direction.debit, journal.transactions.items[0].postings.items[0].direction);
+            try std.testing.expectEqual(fiscus.ledger.Direction.credit, journal.transactions.items[0].postings.items[1].direction);
             try journal.validateJournal();
         },
         .failure => return error.UnexpectedFailure,
@@ -395,7 +395,7 @@ fn expectDecoderFailure(
 }
 
 fn expectBalance(
-    journal: *const fiscus.accounting.Journal,
+    journal: *const fiscus.ledger.Journal,
     report: *const fiscus.reports.BalanceReport,
     account_name: []const u8,
     commodity_symbol: []const u8,
