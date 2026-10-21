@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const accounting = @import("ledger/root.zig");
+const ledger = @import("ledger/root.zig");
 const core = @import("core/root.zig");
 const loader = @import("loader.zig");
 const reports = @import("reports.zig");
@@ -71,7 +71,7 @@ pub const Application = struct {
         self.* = undefined;
     }
 
-    pub fn journal(self: *const Application) ?*const accounting.Journal {
+    pub fn journal(self: *const Application) ?*const ledger.Journal {
         return switch (self.loaded_workspace.result) {
             .journal => |*captured_journal| captured_journal,
             .failure => null,

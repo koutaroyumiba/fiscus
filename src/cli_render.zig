@@ -3,7 +3,7 @@ const fiscus = @import("fiscus");
 
 pub fn writeBalances(
     writer: *std.Io.Writer,
-    journal: *const fiscus.accounting.Journal,
+    journal: *const fiscus.ledger.Journal,
     report: *const fiscus.reports.BalanceReport,
 ) !void {
     for (report.balances.items) |balance| {
@@ -17,7 +17,7 @@ pub fn writeBalances(
 
 pub fn writePrefixBalances(
     writer: *std.Io.Writer,
-    journal: *const fiscus.accounting.Journal,
+    journal: *const fiscus.ledger.Journal,
     prefix: []const u8,
     report: *const fiscus.reports.PrefixBalanceReport,
 ) !void {
@@ -46,7 +46,7 @@ pub fn writePrefixBalances(
 
 pub fn writeInspect(
     writer: *std.Io.Writer,
-    journal: *const fiscus.accounting.Journal,
+    journal: *const fiscus.ledger.Journal,
     report: *const fiscus.reports.InspectReport,
 ) !void {
     for (report.transactions.items, 0..) |transaction_index, report_index| {
@@ -98,7 +98,7 @@ pub fn writeInspect(
 
 pub fn writeAccountRegister(
     writer: *std.Io.Writer,
-    journal: *const fiscus.accounting.Journal,
+    journal: *const fiscus.ledger.Journal,
     report: *const fiscus.reports.AccountRegisterReport,
 ) !void {
     var entry_index: usize = 0;
@@ -138,7 +138,7 @@ pub fn writeAccountRegister(
 }
 
 test "render inspected transaction in canonical form" {
-    var journal = try fiscus.accounting.Journal.init(std.testing.allocator, 1, "personal");
+    var journal = try fiscus.ledger.Journal.init(std.testing.allocator, 1, "personal");
     defer journal.deinit();
 
     const bank = try journal.addAccount("asset:bank");

@@ -20,7 +20,7 @@ const RowSet = struct {
 const Model = struct {
     allocator: std.mem.Allocator,
     application: *const fiscus.application.Application,
-    journal: *const fiscus.accounting.Journal,
+    journal: *const fiscus.ledger.Journal,
     balance_result: fiscus.application.BalanceResult,
 
     rows: []BalanceRow,
@@ -35,7 +35,7 @@ const Model = struct {
     fn init(
         allocator: std.mem.Allocator,
         application: *const fiscus.application.Application,
-        journal: *const fiscus.accounting.Journal,
+        journal: *const fiscus.ledger.Journal,
     ) !Model {
         var balance_result = try application.balances(.all);
         errdefer balance_result.deinit();
@@ -308,7 +308,7 @@ const Model = struct {
 
 fn buildRows(
     allocator: std.mem.Allocator,
-    journal: *const fiscus.accounting.Journal,
+    journal: *const fiscus.ledger.Journal,
     result: *const fiscus.application.BalanceResult,
 ) std.mem.Allocator.Error!RowSet {
     const balances = switch (result.*) {

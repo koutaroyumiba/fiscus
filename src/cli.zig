@@ -104,7 +104,7 @@ pub fn run(
             }
 
             if (prefix) |value| {
-                if (!fiscus.accounting.isValidAccountPrefix(value)) {
+                if (!fiscus.ledger.isValidAccountPrefix(value)) {
                     try stderr.print("fis: invalid account prefix '{s}'\n", .{value});
                     return 2;
                 }

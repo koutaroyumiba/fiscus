@@ -6,7 +6,7 @@ const vaxis = @import("vaxis");
 const vxfw = vaxis.vxfw;
 
 pub const BalanceRow = struct {
-    journal: *const fiscus.accounting.Journal,
+    journal: *const fiscus.ledger.Journal,
     balance: fiscus.reports.Balance,
 
     pub fn widget(self: *BalanceRow) vxfw.Widget {

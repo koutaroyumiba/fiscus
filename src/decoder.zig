@@ -1,8 +1,8 @@
 const std = @import("std");
 
-const accounting = @import("ledger/root.zig");
 const ast = @import("lang/ast.zig");
 const core = @import("core/root.zig");
+const ledger = @import("ledger/root.zig");
 const source = @import("lang/source.zig");
 
 pub const FailureKind = enum {
@@ -82,7 +82,7 @@ pub const Decoder = struct {
         };
     }
 
-    pub fn createJournal(self: *Self, document: *const ast.Document) !accounting.Journal {
+    pub fn createJournal(self: *Self, document: *const ast.Document) !ledger.Journal {
         self.failure = null;
 
         const version = try self.decodeVersion(document);
@@ -90,10 +90,10 @@ pub const Decoder = struct {
             return self.fail(.empty_journal_name, document.journal_name.span);
         }
 
-        return accounting.Journal.init(self.allocator, version, document.journal_name.lexeme);
+        return ledger.Journal.init(self.allocator, version, document.journal_name.lexeme);
     }
 
-    pub fn decode(self: *Self, document: *const ast.Document) !accounting.Journal {
+    pub fn decode(self: *Self, document: *const ast.Document) !ledger.Journal {
         var journal = try self.createJournal(document);
         errdefer journal.deinit();
 
@@ -112,7 +112,7 @@ pub const Decoder = struct {
         self: *Self,
         root: *const ast.Document,
         sources: []const SourceDocument,
-    ) !accounting.Journal {
+    ) !ledger.Journal {
         var journal = try self.createJournal(root);
         errdefer journal.deinit();
 
@@ -144,7 +144,7 @@ pub const Decoder = struct {
         return journal;
     }
 
-    pub fn decodeCommodities(self: *Self, journal: *accounting.Journal, commodities: []const ast.CommodityStmt) !void {
+    pub fn decodeCommodities(self: *Self, journal: *ledger.Journal, commodities: []const ast.CommodityStmt) !void {
         for (commodities) |comm| {
             const scale = std.fmt.parseInt(u8, comm.scale.lexeme, 10) catch {
                 return self.fail(.invalid_commodity_scale, comm.scale.span);
@@ -174,7 +174,7 @@ pub const Decoder = struct {
         }
     }
 
-    pub fn decodeAccounts(self: *Self, journal: *accounting.Journal, accounts: []const ast.AccountStmt) !void {
+    pub fn decodeAccounts(self: *Self, journal: *ledger.Journal, accounts: []const ast.AccountStmt) !void {
         for (accounts) |account| {
             _ = try self.inferAccountType(account);
 
@@ -198,7 +198,7 @@ pub const Decoder = struct {
 
     pub fn decodeTransactions(
         self: *Self,
-        journal: *accounting.Journal,
+        journal: *ledger.Journal,
         transactions: []const ast.TransactionStmt,
     ) !void {
         for (transactions) |transaction| {
@@ -208,7 +208,7 @@ pub const Decoder = struct {
 
     pub fn validateSource(
         self: *Self,
-        journal: *const accounting.Journal,
+        journal: *const ledger.Journal,
         document: *const ast.Document,
         role: ast.SourceRole,
     ) !void {
@@ -271,7 +271,7 @@ pub const Decoder = struct {
         return version;
     }
 
-    fn inferAccountType(self: *Self, account: ast.AccountStmt) DecodeError!accounting.AccountType {
+    fn inferAccountType(self: *Self, account: ast.AccountStmt) DecodeError!ledger.AccountType {
         const name = account.name.lexeme;
 
         const separator = std.mem.indexOfScalar(u8, name, ':') orelse name.len;
@@ -286,7 +286,7 @@ pub const Decoder = struct {
         return self.fail(.invalid_account_prefix, account.name.span);
     }
 
-    fn decodeTransaction(self: *Self, journal: *accounting.Journal, transaction: ast.TransactionStmt) !void {
+    fn decodeTransaction(self: *Self, journal: *ledger.Journal, transaction: ast.TransactionStmt) !void {
         const date = core.Date.parse(transaction.date.lexeme) catch {
             return self.fail(.invalid_date, transaction.date.span);
         };
@@ -365,13 +365,13 @@ pub const Decoder = struct {
 
     fn decodePosting(
         self: *Self,
-        journal: *accounting.Journal,
-        transaction_index: accounting.TransactionIndex,
+        journal: *ledger.Journal,
+        transaction_index: ledger.TransactionIndex,
         posting: ast.PostingStmt,
     ) !void {
         // i dont really like this...
         // TODO: need to implement a cleaner solution here
-        const direction: accounting.Direction = switch (posting.direction) {
+        const direction: ledger.Direction = switch (posting.direction) {
             .debit => .debit,
             .credit => .credit,
         };

@@ -1,7 +1,7 @@
 const std = @import("std");
 
-const accounting = @import("ledger/root.zig");
 const decoder = @import("decoder.zig");
+const ledger = @import("ledger/root.zig");
 const lexer = @import("lang/lexer.zig");
 const parser = @import("lang/parser.zig");
 
@@ -12,7 +12,7 @@ pub const Failure = union(enum) {
 };
 
 pub const Result = union(enum) {
-    journal: accounting.Journal,
+    journal: ledger.Journal,
     failure: Failure,
 
     pub fn deinit(self: *Result) void {

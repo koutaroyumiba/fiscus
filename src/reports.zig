@@ -1,12 +1,12 @@
 const std = @import("std");
 
-const accounting = @import("ledger/root.zig");
 const core = @import("core/root.zig");
+const ledger = @import("ledger/root.zig");
 
 pub const ReportError = error{Overflow};
 
 const BalanceKey = struct {
-    account: accounting.AccountIndex,
+    account: ledger.AccountIndex,
     commodity: core.CommodityId,
 };
 
@@ -16,13 +16,13 @@ pub const BalanceSort = enum {
 };
 
 pub const Balance = struct {
-    account: accounting.AccountIndex,
+    account: ledger.AccountIndex,
     amount: core.Amount,
 };
 
 pub const InspectFilter = struct {
     id: ?[]const u8 = null,
-    account: ?accounting.AccountIndex = null,
+    account: ?ledger.AccountIndex = null,
     from: ?core.Date = null,
     to: ?core.Date = null,
     tag: ?[]const u8 = null,
@@ -30,7 +30,7 @@ pub const InspectFilter = struct {
 
 pub const InspectReport = struct {
     allocator: std.mem.Allocator,
-    transactions: std.ArrayList(accounting.TransactionIndex),
+    transactions: std.ArrayList(ledger.TransactionIndex),
 
     pub fn deinit(self: *InspectReport) void {
         self.transactions.deinit(self.allocator);
@@ -39,7 +39,7 @@ pub const InspectReport = struct {
 };
 
 pub const AccountRegisterEntry = struct {
-    transaction: accounting.TransactionIndex,
+    transaction: ledger.TransactionIndex,
     change: core.Amount,
     balance: core.Amount,
 };
@@ -78,7 +78,7 @@ pub const PrefixBalanceReport = struct {
 
 pub fn calculateBalances(
     allocator: std.mem.Allocator,
-    journal: *const accounting.Journal,
+    journal: *const ledger.Journal,
 ) (std.mem.Allocator.Error || ReportError)!BalanceReport {
     var balances: std.ArrayList(Balance) = .empty;
     errdefer balances.deinit(allocator);
@@ -137,11 +137,11 @@ pub fn calculateBalances(
 
 pub fn calculatePrefixBalances(
     allocator: std.mem.Allocator,
-    journal: *const accounting.Journal,
+    journal: *const ledger.Journal,
     prefix: []const u8,
     sort: BalanceSort,
 ) (std.mem.Allocator.Error || ReportError || error{InvalidAccountPrefix})!PrefixBalanceReport {
-    if (!accounting.isValidAccountPrefix(prefix)) {
+    if (!ledger.isValidAccountPrefix(prefix)) {
         return error.InvalidAccountPrefix;
     }
 
@@ -159,7 +159,7 @@ pub fn calculatePrefixBalances(
 
     for (all_balances.balances.items) |balance| {
         const account = journal.accountFromIndex(balance.account).?;
-        if (!accounting.matchesAccountPrefix(account.name, prefix)) {
+        if (!ledger.matchesAccountPrefix(account.name, prefix)) {
             continue;
         }
 
@@ -202,10 +202,10 @@ pub fn calculatePrefixBalances(
 
 pub fn inspectTransactions(
     allocator: std.mem.Allocator,
-    journal: *const accounting.Journal,
+    journal: *const ledger.Journal,
     filter: InspectFilter,
 ) std.mem.Allocator.Error!InspectReport {
-    var transactions: std.ArrayList(accounting.TransactionIndex) = .empty;
+    var transactions: std.ArrayList(ledger.TransactionIndex) = .empty;
     errdefer transactions.deinit(allocator);
 
     for (journal.transactions.items, 0..) |transaction, index| {
@@ -215,7 +215,7 @@ pub fn inspectTransactions(
     }
 
     std.mem.sort(
-        accounting.TransactionIndex,
+        ledger.TransactionIndex,
         transactions.items,
         journal,
         lessThanTransaction,
@@ -226,8 +226,8 @@ pub fn inspectTransactions(
 
 pub fn calculateAccountRegister(
     allocator: std.mem.Allocator,
-    journal: *const accounting.Journal,
-    account_index: accounting.AccountIndex,
+    journal: *const ledger.Journal,
+    account_index: ledger.AccountIndex,
     filter: InspectFilter,
 ) (std.mem.Allocator.Error || ReportError)!AccountRegisterReport {
     const account = journal.accountFromIndex(account_index).?;
@@ -309,7 +309,7 @@ pub fn calculateAccountRegister(
     return .{ .allocator = allocator, .entries = entries };
 }
 
-fn matchesInspectFilter(transaction: accounting.Transaction, filter: InspectFilter) bool {
+fn matchesInspectFilter(transaction: ledger.Transaction, filter: InspectFilter) bool {
     if (filter.id) |id| {
         const transaction_id = transaction.id orelse return false;
         if (!std.mem.eql(u8, transaction_id, id)) {
@@ -386,9 +386,9 @@ fn lessThanAmount(_: void, left: core.Amount, right: core.Amount) bool {
 }
 
 fn lessThanTransaction(
-    journal: *const accounting.Journal,
-    left: accounting.TransactionIndex,
-    right: accounting.TransactionIndex,
+    journal: *const ledger.Journal,
+    left: ledger.TransactionIndex,
+    right: ledger.TransactionIndex,
 ) bool {
     const left_transaction = journal.transactions.items[left];
     const right_transaction = journal.transactions.items[right];
@@ -401,7 +401,7 @@ fn lessThanTransaction(
 }
 
 const PrefixSortContext = struct {
-    journal: *const accounting.Journal,
+    journal: *const ledger.Journal,
     sort: BalanceSort,
 };
 
@@ -425,7 +425,7 @@ fn lessThanPrefixBalance(
 }
 
 test "calculate natural accounting balances" {
-    var journal = try accounting.Journal.init(std.testing.allocator, 1, "personal");
+    var journal = try ledger.Journal.init(std.testing.allocator, 1, "personal");
     defer journal.deinit();
 
     const bank = try journal.addAccount("asset:bank");
@@ -457,7 +457,7 @@ test "calculate natural accounting balances" {
 }
 
 test "aggregate balances by component-aware account prefix" {
-    var journal = try accounting.Journal.init(std.testing.allocator, 1, "prefixes");
+    var journal = try ledger.Journal.init(std.testing.allocator, 1, "prefixes");
     defer journal.deinit();
 
     const checking = try journal.addAccount("asset:bank:checking");
@@ -468,7 +468,7 @@ test "aggregate balances by component-aware account prefix" {
     const larger_aud = try journal.catalog.parseAmount("200.00", "AUD");
     const usd = try journal.catalog.parseAmount("25.00", "USD");
 
-    const entries = [_]struct { account: accounting.AccountIndex, amount: core.Amount }{
+    const entries = [_]struct { account: ledger.AccountIndex, amount: core.Amount }{
         .{ .account = checking, .amount = aud },
         .{ .account = savings, .amount = larger_aud },
         .{ .account = checking, .amount = usd },
@@ -519,7 +519,7 @@ test "aggregate balances by component-aware account prefix" {
 }
 
 test "inspect transactions with structured filters and chronological ordering" {
-    var journal = try accounting.Journal.init(std.testing.allocator, 1, "personal");
+    var journal = try ledger.Journal.init(std.testing.allocator, 1, "personal");
     defer journal.deinit();
 
     const bank = try journal.addAccount("asset:bank");
@@ -546,7 +546,7 @@ test "inspect transactions with structured filters and chronological ordering" {
     var all = try inspectTransactions(std.testing.allocator, &journal, .{});
     defer all.deinit();
     try std.testing.expectEqualSlices(
-        accounting.TransactionIndex,
+        ledger.TransactionIndex,
         &.{ earlier, later },
         all.transactions.items,
     );
@@ -560,7 +560,7 @@ test "inspect transactions with structured filters and chronological ordering" {
     });
     defer filtered.deinit();
     try std.testing.expectEqualSlices(
-        accounting.TransactionIndex,
+        ledger.TransactionIndex,
         &.{later},
         filtered.transactions.items,
     );
@@ -586,7 +586,7 @@ test "inspect transactions with structured filters and chronological ordering" {
 }
 
 test "report separate balances per commodity" {
-    var journal = try accounting.Journal.init(std.testing.allocator, 1, "multi-currency");
+    var journal = try ledger.Journal.init(std.testing.allocator, 1, "multi-currency");
     defer journal.deinit();
 
     const cash = try journal.addAccount("asset:cash");
