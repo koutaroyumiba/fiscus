@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const core = @import("../core/root.zig");
+const core = @import("core/root.zig");
 
 pub const JournalError = error{
     InvalidAccountName,

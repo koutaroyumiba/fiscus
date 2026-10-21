@@ -1,9 +1,10 @@
 const std = @import("std");
 
 const ast = @import("lang/ast.zig");
-const core = @import("core/root.zig");
 const ledger = @import("ledger/root.zig");
 const source = @import("lang/source.zig");
+
+const core = ledger.Core;
 
 pub const FailureKind = enum {
     invalid_version,

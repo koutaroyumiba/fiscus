@@ -1,7 +1,8 @@
 const std = @import("std");
 
-const core = @import("core/root.zig");
 const ledger = @import("ledger/root.zig");
+
+const core = ledger.Core;
 
 pub const ReportError = error{Overflow};
 

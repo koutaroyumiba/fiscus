@@ -1,5 +1,7 @@
 const journal = @import("journal.zig");
 
+pub const Core = @import("core/root.zig");
+
 pub const Journal = journal.Journal;
 
 pub const Direction = journal.Direction;
@@ -12,5 +14,6 @@ pub const isValidAccountPrefix = journal.isValidAccountPrefix;
 pub const matchesAccountPrefix = journal.matchesAccountPrefix;
 
 test {
+    _ = Core;
     _ = journal;
 }

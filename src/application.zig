@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const ledger = @import("ledger/root.zig");
-const core = @import("core/root.zig");
+const core = ledger.Core;
 const loader = @import("loader.zig");
 const reports = @import("reports.zig");
 const source_manager = @import("source_manager.zig");
