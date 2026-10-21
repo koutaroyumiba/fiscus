@@ -19,7 +19,7 @@ pub const BalanceRow = struct {
     fn typeErasedDrawFn(ptr: *anyopaque, ctx: vxfw.DrawContext) std.mem.Allocator.Error!vxfw.Surface {
         const self: *BalanceRow = @ptrCast(@alignCast(ptr));
 
-        const account = self.journal.getAccount(self.balance.account).?;
+        const account = self.journal.accountFromIndex(self.balance.account).?;
         const commodity = self.journal.catalog.commodityFromId(self.balance.amount.commodity).?;
 
         var value_output = std.Io.Writer.Allocating.init(ctx.arena);

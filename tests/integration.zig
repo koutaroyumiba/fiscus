@@ -30,7 +30,7 @@ test "parse and decode complete journal" {
             try std.testing.expectEqual(@as(usize, 3), journal.accounts.items.len);
             try std.testing.expectEqual(@as(usize, 2), journal.transactions.items.len);
 
-            try journal.validate();
+            try journal.validateJournal();
         },
         .failure => return error.UnexpectedFailure,
     }
@@ -60,7 +60,7 @@ test "decode fixed account commodities and short transactions" {
             try std.testing.expectEqual(nzd, journal.transactions.items[0].postings.items[0].amount.commodity);
             try std.testing.expectEqual(fiscus.accounting.Direction.debit, journal.transactions.items[0].postings.items[0].direction);
             try std.testing.expectEqual(fiscus.accounting.Direction.credit, journal.transactions.items[0].postings.items[1].direction);
-            try journal.validate();
+            try journal.validateJournal();
         },
         .failure => return error.UnexpectedFailure,
     }
@@ -349,7 +349,7 @@ test "load activity coverage workspace" {
             try std.testing.expectEqualStrings("activity-coverage", journal.name);
             try std.testing.expectEqual(@as(usize, 21), journal.accounts.items.len);
             try std.testing.expectEqual(@as(usize, 25), journal.transactions.items.len);
-            try journal.validate();
+            try journal.validateJournal();
 
             const air_id = journal.catalog.idFromSymbol("NZX.AIR") orelse return error.ExpectedCommodity;
             const air = journal.catalog.commodityFromId(air_id).?;
@@ -401,7 +401,7 @@ fn expectBalance(
     commodity_symbol: []const u8,
     expected_text: []const u8,
 ) !void {
-    const account_id = journal.findAccount(account_name) orelse return error.AccountNotFound;
+    const account_id = journal.accountIndexFromName(account_name) orelse return error.AccountNotFound;
     const expected = try journal.catalog.parseAmount(expected_text, commodity_symbol);
 
     for (report.balances.items) |balance| {

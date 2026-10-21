@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const accounting = @import("accounting.zig");
+const accounting = @import("ledger/root.zig");
 const decoder = @import("decoder.zig");
 const lexer = @import("lang/lexer.zig");
 const parser = @import("lang/parser.zig");

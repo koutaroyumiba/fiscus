@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const accounting = @import("accounting.zig");
+const accounting = @import("ledger/root.zig");
 const core = @import("core/root.zig");
 const loader = @import("loader.zig");
 const reports = @import("reports.zig");
@@ -92,13 +92,13 @@ pub const Application = struct {
         const loaded_journal = self.journal() orelse return error.JournalUnavailable;
 
         if (query.id) |id| {
-            if (loaded_journal.findTransactionById(id) == null) {
+            if (loaded_journal.transactionIndexFromId(id) == null) {
                 return error.UnknownTransaction;
             }
         }
 
         const account_id = if (query.account) |account|
-            loaded_journal.findAccount(account) orelse return error.UnknownAccount
+            loaded_journal.accountIndexFromName(account) orelse return error.UnknownAccount
         else
             null;
 
@@ -118,12 +118,12 @@ pub const Application = struct {
         const loaded_journal = self.journal() orelse return error.JournalUnavailable;
 
         if (query.id) |id| {
-            if (loaded_journal.findTransactionById(id) == null) {
+            if (loaded_journal.transactionIndexFromId(id) == null) {
                 return error.UnknownTransaction;
             }
         }
 
-        const account_id = loaded_journal.findAccount(query.account) orelse
+        const account_id = loaded_journal.accountIndexFromName(query.account) orelse
             return error.UnknownAccount;
 
         return reports.calculateAccountRegister(
