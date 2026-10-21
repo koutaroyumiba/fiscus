@@ -7,7 +7,7 @@ pub fn writeBalances(
     report: *const fiscus.reports.BalanceReport,
 ) !void {
     for (report.balances.items) |balance| {
-        const account = journal.getAccount(balance.account).?;
+        const account = journal.accountFromIndex(balance.account).?;
 
         try writer.print("{s:<45} ", .{account.name});
         try journal.catalog.writeAmount(writer, balance.amount);
@@ -36,7 +36,7 @@ pub fn writePrefixBalances(
                 continue;
             }
 
-            const account = journal.getAccount(balance.account).?;
+            const account = journal.accountFromIndex(balance.account).?;
             try writer.print("  {s:<43} ", .{account.name});
             try journal.catalog.writeAmount(writer, balance.amount);
             try writer.writeByte('\n');
@@ -81,7 +81,7 @@ pub fn writeInspect(
                 .debit => '+',
                 .credit => '-',
             };
-            const account = journal.getAccount(posting.account).?;
+            const account = journal.accountFromIndex(posting.account).?;
 
             try writer.print("    {c} {s} ", .{ marker, account.name });
             try journal.catalog.writeAmount(writer, posting.amount);

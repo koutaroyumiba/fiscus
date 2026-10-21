@@ -1,12 +1,12 @@
 const std = @import("std");
 
-const accounting = @import("accounting.zig");
+const accounting = @import("ledger/root.zig");
 const core = @import("core/root.zig");
 
 pub const ReportError = error{Overflow};
 
 const BalanceKey = struct {
-    account: accounting.AccountId,
+    account: accounting.AccountIndex,
     commodity: core.CommodityId,
 };
 
@@ -16,13 +16,13 @@ pub const BalanceSort = enum {
 };
 
 pub const Balance = struct {
-    account: accounting.AccountId,
+    account: accounting.AccountIndex,
     amount: core.Amount,
 };
 
 pub const InspectFilter = struct {
     id: ?[]const u8 = null,
-    account: ?accounting.AccountId = null,
+    account: ?accounting.AccountIndex = null,
     from: ?core.Date = null,
     to: ?core.Date = null,
     tag: ?[]const u8 = null,
@@ -88,7 +88,7 @@ pub fn calculateBalances(
 
     for (journal.transactions.items) |transaction| {
         for (transaction.postings.items) |posting| {
-            const account = journal.getAccount(posting.account).?;
+            const account = journal.accountFromIndex(posting.account).?;
             const increases_normal_balance = switch (account.account_type) {
                 .asset, .expense => posting.direction == .debit,
                 .liability, .equity, .income => posting.direction == .credit,
@@ -158,7 +158,7 @@ pub fn calculatePrefixBalances(
     defer all_balances.deinit();
 
     for (all_balances.balances.items) |balance| {
-        const account = journal.getAccount(balance.account).?;
+        const account = journal.accountFromIndex(balance.account).?;
         if (!accounting.matchesAccountPrefix(account.name, prefix)) {
             continue;
         }
@@ -227,10 +227,10 @@ pub fn inspectTransactions(
 pub fn calculateAccountRegister(
     allocator: std.mem.Allocator,
     journal: *const accounting.Journal,
-    account_id: accounting.AccountId,
+    account_index: accounting.AccountIndex,
     filter: InspectFilter,
 ) (std.mem.Allocator.Error || ReportError)!AccountRegisterReport {
-    const account = journal.getAccount(account_id).?;
+    const account = journal.accountFromIndex(account_index).?;
 
     var entries: std.ArrayList(AccountRegisterEntry) = .empty;
     errdefer entries.deinit(allocator);
@@ -241,18 +241,18 @@ pub fn calculateAccountRegister(
     var changes: std.ArrayList(core.Amount) = .empty;
     defer changes.deinit(allocator);
 
-    var history = try inspectTransactions(allocator, journal, .{ .account = account_id });
+    var history = try inspectTransactions(allocator, journal, .{ .account = account_index });
     defer history.deinit();
 
     var display_filter = filter;
-    display_filter.account = account_id;
+    display_filter.account = account_index;
 
     for (history.transactions.items) |transaction_index| {
         const transaction = journal.transactions.items[transaction_index];
         changes.clearRetainingCapacity();
 
         for (transaction.postings.items) |posting| {
-            if (posting.account != account_id) {
+            if (posting.account != account_index) {
                 continue;
             }
 
@@ -414,8 +414,8 @@ fn lessThanPrefixBalance(
         return left.amount.commodity < right.amount.commodity;
     }
 
-    const left_name = context.journal.getAccount(left.account).?.name;
-    const right_name = context.journal.getAccount(right.account).?.name;
+    const left_name = context.journal.accountFromIndex(left.account).?.name;
+    const right_name = context.journal.accountFromIndex(right.account).?.name;
 
     if (context.sort == .amount and left.amount.value != right.amount.value) {
         return left.amount.value > right.amount.value;
@@ -468,7 +468,7 @@ test "aggregate balances by component-aware account prefix" {
     const larger_aud = try journal.catalog.parseAmount("200.00", "AUD");
     const usd = try journal.catalog.parseAmount("25.00", "USD");
 
-    const entries = [_]struct { account: accounting.AccountId, amount: core.Amount }{
+    const entries = [_]struct { account: accounting.AccountIndex, amount: core.Amount }{
         .{ .account = checking, .amount = aud },
         .{ .account = savings, .amount = larger_aud },
         .{ .account = checking, .amount = usd },

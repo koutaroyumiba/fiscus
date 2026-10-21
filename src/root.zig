@@ -1,4 +1,4 @@
-pub const accounting = @import("accounting.zig");
+pub const accounting = @import("ledger/journal.zig");
 pub const application = @import("application.zig");
 pub const core = @import("core/root.zig");
 pub const decoder = @import("decoder.zig");

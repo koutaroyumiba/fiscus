@@ -26,6 +26,14 @@ That's kind of how I came up with the current syntax of transaction - with a big
 
 ---
 
+ZIG THINGS
+
+So, one thing that kind of surprised me with zig is that `zig test <file>` doens't allow `<file>` to import anything outside of its directory (like walk the tree up like `../`. At first, I was like that's kind of weird and annoying but after a while I realised that this lwk is kind of nice if you think about it...
+
+By enforcing no dependencies from outside the working directory, you make it really easy to traverse through and manage code because you can guarantee that stuff outside of the working directory will NOT change things that in the current working directory - it also means that changing the current working directory will only affect the parent directories.
+
+---
+
 Some invariants for fiscus:
 - Account and transaction IDs are nonempty and unique.
 - Account names are unique under a documented comparison rule.

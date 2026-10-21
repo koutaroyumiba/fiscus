@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const accounting = @import("accounting.zig");
+const accounting = @import("ledger/root.zig");
 const ast = @import("lang/ast.zig");
 const core = @import("core/root.zig");
 const source = @import("lang/source.zig");
@@ -376,11 +376,11 @@ pub const Decoder = struct {
             .credit => .credit,
         };
 
-        const account = journal.findAccount(posting.account.lexeme) orelse {
+        const account = journal.accountIndexFromName(posting.account.lexeme) orelse {
             return self.fail(.unknown_account, posting.account.span);
         };
 
-        const account_details = journal.getAccount(account).?;
+        const account_details = journal.accountFromIndex(account).?;
         const amount_commodity = if (posting.commodity) |token|
             token.lexeme
         else if (account_details.commodity) |commodity_id|
