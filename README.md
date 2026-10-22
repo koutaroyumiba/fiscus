@@ -25,6 +25,17 @@ While researching, I learnt about double-entry bookkeeping as well as examples o
 
 It was a lot of fun to think about the syntax for this language and how to go about supporting some common financial activities that people go through :D
 
+## Browser viewer
+
+A private, dependency-free journal viewer is available in [`web/`](web/). It parses files entirely in the browser and provides transaction search, account/tag filters, account balances, and visual reports.
+
+```sh
+python3 -m http.server 8080 -d web
+# open http://localhost:8080
+```
+
+Drop a complete Fiscus workspace folder onto the viewer (nested transaction folders are supported), choose a folder, or select individual `.fiscus` files together. No journal data is uploaded or persisted.
+
 ## Current Features (implemented)
 
 ```sh

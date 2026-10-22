@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="A private, client-side viewer for Fiscus journals." />
+  <title>Fiscus Ledger</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+
+  <section id="welcome" class="welcome">
+    <header class="welcome-nav">
+      <a class="brand" href="#" aria-label="Fiscus home">
+        <span class="brand-mark" aria-hidden="true">ƒ</span>
+        <span>Fiscus <em>viewer</em></span>
+      </a>
+      <span class="privacy-pill"><i></i> Local-only processing</span>
+    </header>
+
+    <main class="welcome-main">
+      <div class="hero-copy">
+        <p class="eyebrow">Your ledger, made legible</p>
+        <h1>See where your<br><span>money moves.</span></h1>
+        <p class="hero-description">Turn a plain-text Fiscus journal into a clear financial picture. No account, no upload, no data leaving your browser.</p>
+        <div class="hero-notes" aria-label="Privacy details">
+          <span>01 / Parse locally</span>
+          <span>02 / Explore instantly</span>
+          <span>03 / Leave no trace</span>
+        </div>
+      </div>
+
+      <div class="upload-wrap">
+        <div id="drop-zone" class="drop-zone" tabindex="0" role="button" aria-label="Upload a Fiscus journal">
+          <input id="file-input" type="file" accept=".fiscus,text/plain" webkitdirectory directory multiple hidden />
+          <input id="journal-file-input" type="file" accept=".fiscus,text/plain" multiple hidden />
+          <div class="file-glyph" aria-hidden="true">
+            <svg viewBox="0 0 48 56" fill="none"><path d="M5 1h25l13 13v37a4 4 0 0 1-4 4H5a4 4 0 0 1-4-4V5a4 4 0 0 1 4-4Z"/><path d="M29 1v14h14M13 30h18M13 38h13"/></svg>
+            <span>.fis</span>
+          </div>
+          <h2>Open your journal</h2>
+          <p>Drop your Fiscus <strong>folder</strong> here</p>
+          <button class="primary-button" type="button">Choose folder</button>
+          <button class="file-link" type="button">or choose individual .fiscus files</button>
+          <small>Every .fiscus file is read in memory and never sent anywhere.</small>
+        </div>
+        <button id="demo-button" class="demo-button" type="button">
+          <span>Not ready with a file?</span> Explore the sample ledger
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5"/></svg>
+        </button>
+      </div>
+    </main>
+    <footer class="welcome-footer"><span>FISCUS / JOURNAL FORMAT V1</span><span>PRIVATE BY DEFAULT</span></footer>
+  </section>
+
+  <section id="dashboard" class="dashboard" hidden>
+    <aside class="sidebar">
+      <a class="brand dashboard-brand" href="#" aria-label="Fiscus viewer">
+        <span class="brand-mark" aria-hidden="true">ƒ</span>
+        <span>Fiscus</span>
+      </a>
+      <nav class="side-nav" aria-label="Main navigation">
+        <button class="nav-item active" data-view="overview" type="button"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Overview</button>
+        <button class="nav-item" data-view="transactions" type="button"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/><circle cx="8" cy="5" r="1"/><circle cx="16" cy="12" r="1"/></svg>Transactions <span id="transaction-count"></span></button>
+        <button class="nav-item" data-view="accounts" type="button"><svg viewBox="0 0 24 24"><path d="M3 10h18M5 10v9m4-9v9m6-9v9m4-9v9M3 19h18M12 3 3 8h18l-9-5Z"/></svg>Accounts</button>
+        <button class="nav-item" data-view="reports" type="button"><svg viewBox="0 0 24 24"><path d="M4 20V10m6 10V4m6 16v-7m4 7H2"/></svg>Reports</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="local-card">
+          <span class="shield"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+          <div><strong>Private session</strong><small>Your data stays in this tab.</small></div>
+        </div>
+        <button id="open-new" class="open-new" type="button"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Open another journal</button>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <p class="breadcrumb">JOURNAL / <span id="journal-name">—</span></p>
+          <h1 id="view-title">Overview</h1>
+        </div>
+        <div class="top-actions">
+          <label class="search-box"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg><input id="search-input" type="search" placeholder="Search transactions" aria-label="Search transactions"><kbd>⌘ K</kbd></label>
+          <button id="replace-file" class="icon-button" type="button" title="Open another file" aria-label="Open another file"><svg viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 17v3h16v-3"/></svg></button>
+        </div>
+      </header>
+
+      <div class="filterbar">
+        <label class="select-control"><span>Account</span><select id="account-filter" aria-label="Filter by account"><option value="">All accounts</option></select></label>
+        <div class="tag-filter"><span>Tags</span><div id="tag-chips" class="tag-chips"><button class="tag-chip active" data-tag="" type="button">All</button></div></div>
+        <label class="select-control commodity-control"><span>Currency</span><select id="commodity-filter" aria-label="Choose report commodity"></select></label>
+        <button id="clear-filters" class="clear-filter" type="button">Clear filters</button>
+      </div>
+
+      <div id="notice" class="notice" hidden></div>
+      <div id="content" class="content" aria-live="polite"></div>
+    </main>
+  </section>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
