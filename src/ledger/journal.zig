@@ -386,21 +386,32 @@ fn isValidAccountName(name: []const u8) bool {
 }
 
 fn isValidTag(tag: []const u8) bool {
-    if (tag.len == 0 or tag[0] < 'a' or tag[0] > 'z') return false;
+    if (tag.len == 0) return false;
 
-    for (tag[1..]) |char| {
-        const valid =
-            (char >= 'a' and char <= 'z') or
-            (char >= '0' and char <= '9') or
-            char == '-' or
-            char == '_';
+    var at_component_start = true;
 
-        if (!valid) {
+    for (tag) |char| {
+        if (char == ':') {
+            if (at_component_start) return false;
+            at_component_start = true;
+            continue;
+        }
+
+        const is_lowercase = char >= 'a' and char <= 'z';
+        const is_digit = char >= '0' and char <= '9';
+
+        if (at_component_start) {
+            if (!is_lowercase) return false;
+            at_component_start = false;
+            continue;
+        }
+
+        if (!is_lowercase and !is_digit and char != '-' and char != '_') {
             return false;
         }
     }
 
-    return true;
+    return !at_component_start;
 }
 
 // === TESTS
