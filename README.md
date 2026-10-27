@@ -57,6 +57,12 @@ fis balance examples/personal.fiscus --prefix asset:bank
 # show the largest child balances first
 fis balance examples/personal.fiscus --prefix asset:bank --sort amount
 
+# aggregate only transactions with an exact tag
+fis balance examples/personal.fiscus --tag trip:japan --prefix expense
+
+# aggregate a tag namespace (matches trip and trip:*)
+fis balance examples/personal.fiscus --tag-prefix trip --prefix expense --sort amount
+
 # inspect transactions in ./journal.fiscus
 fis inspect
 

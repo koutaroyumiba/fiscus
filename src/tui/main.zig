@@ -37,7 +37,7 @@ const Model = struct {
         application: *const fiscus.application.Application,
         journal: *const fiscus.ledger.Journal,
     ) !Model {
-        var balance_result = try application.balances(.all);
+        var balance_result = try application.balances(.{});
         errdefer balance_result.deinit();
 
         const row_set = try buildRows(allocator, journal, &balance_result);
@@ -141,10 +141,12 @@ const Model = struct {
     }
 
     fn applyPrefix(self: *Model, prefix: []const u8) std.mem.Allocator.Error!bool {
-        const query: fiscus.application.BalanceQuery = if (prefix.len == 0)
-            .all
-        else
-            .{ .prefix = .{ .value = prefix, .sort = .account } };
+        const query = fiscus.application.BalanceQuery{
+            .scope = if (prefix.len == 0)
+                .all
+            else
+                .{ .prefix = .{ .value = prefix, .sort = .account } },
+        };
 
         var new_result = self.application.balances(query) catch |err| switch (err) {
             error.OutOfMemory => return error.OutOfMemory,

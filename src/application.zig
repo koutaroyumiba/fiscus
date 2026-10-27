@@ -7,12 +7,17 @@ const reports = @import("reports.zig");
 const source_manager = @import("source_manager.zig");
 const workspace = @import("workspace.zig");
 
-pub const BalanceQuery = union(enum) {
+pub const BalanceScope = union(enum) {
     all,
     prefix: struct {
         value: []const u8,
         sort: reports.BalanceSort = .account,
     },
+};
+
+pub const BalanceQuery = struct {
+    scope: BalanceScope = .all,
+    tag: ?reports.TagFilter = null,
 };
 
 pub const InspectQuery = struct {
@@ -143,9 +148,11 @@ pub const Application = struct {
     pub fn balances(self: *const Application, query: BalanceQuery) !BalanceResult {
         const loaded_journal = self.journal() orelse return error.JournalUnavailable;
 
-        return switch (query) {
+        const filter = reports.BalanceFilter{ .tag = query.tag };
+
+        return switch (query.scope) {
             .all => .{
-                .all = try reports.calculateBalances(self.allocator, loaded_journal),
+                .all = try reports.calculateBalances(self.allocator, loaded_journal, filter),
             },
             .prefix => |options| .{
                 .prefix = try reports.calculatePrefixBalances(
@@ -153,6 +160,7 @@ pub const Application = struct {
                     loaded_journal,
                     options.value,
                     options.sort,
+                    filter,
                 ),
             },
         };
@@ -170,7 +178,7 @@ test "load application and calculate balances" {
 
     try std.testing.expect(application.journal() != null);
 
-    var result = try application.balances(.all);
+    var result = try application.balances(.{});
     defer result.deinit();
 
     switch (result) {
@@ -181,9 +189,11 @@ test "load application and calculate balances" {
     }
 
     var prefix_result = try application.balances(.{
-        .prefix = .{
-            .value = "asset:bank:nzd",
-            .sort = .amount,
+        .scope = .{
+            .prefix = .{
+                .value = "asset:bank:nzd",
+                .sort = .amount,
+            },
         },
     });
     defer prefix_result.deinit();
@@ -250,5 +260,5 @@ test "queries require a valid journal" {
     _ = load_failure.failure;
     try std.testing.expect(load_failure.sources.files.items.len > 0);
 
-    try std.testing.expectError(error.JournalUnavailable, application.balances(.all));
+    try std.testing.expectError(error.JournalUnavailable, application.balances(.{}));
 }

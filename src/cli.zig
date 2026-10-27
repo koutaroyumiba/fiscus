@@ -37,6 +37,7 @@ pub fn run(
     var prefix: ?[]const u8 = null;
     var sort: fiscus.reports.BalanceSort = .account;
     var sort_was_set = false;
+    var balance_tag: ?fiscus.reports.TagFilter = null;
 
     var inspect_id: ?[]const u8 = null;
     var inspect_account: ?[]const u8 = null;
@@ -91,6 +92,22 @@ pub fn run(
                     }
 
                     sort_was_set = true;
+                    index += 2;
+                } else if (std.mem.eql(u8, args[index], "--tag")) {
+                    if (index + 1 >= args.len or balance_tag != null) {
+                        try writeUsage(stderr);
+                        return 2;
+                    }
+
+                    balance_tag = .{ .exact = args[index + 1] };
+                    index += 2;
+                } else if (std.mem.eql(u8, args[index], "--tag-prefix")) {
+                    if (index + 1 >= args.len or balance_tag != null) {
+                        try writeUsage(stderr);
+                        return 2;
+                    }
+
+                    balance_tag = .{ .prefix = args[index + 1] };
                     index += 2;
                 } else {
                     try writeUsage(stderr);
@@ -209,10 +226,13 @@ pub fn run(
             try stdout.print("{s}: valid\n", .{file_name});
         },
         .balance => {
-            const query: fiscus.application.BalanceQuery = if (prefix) |value|
-                .{ .prefix = .{ .value = value, .sort = sort } }
-            else
-                .all;
+            const query = fiscus.application.BalanceQuery{
+                .scope = if (prefix) |value|
+                    .{ .prefix = .{ .value = value, .sort = sort } }
+                else
+                    .all,
+                .tag = balance_tag,
+            };
 
             var result = application.balances(query) catch |err| switch (err) {
                 error.OutOfMemory => return error.OutOfMemory,
@@ -295,8 +315,7 @@ fn writeUsage(writer: *std.Io.Writer) !void {
     try writer.writeAll(
         \\usage:
         \\  fis check [file]
-        \\  fis balance [file]
-        \\  fis balance [file] --prefix <account> [--sort account|amount]
+        \\  fis balance [file] [--prefix <account>] [--sort account|amount] [--tag <tag> | --tag-prefix <prefix>]
         \\  fis inspect [file] [--id <id>] [--account <account>] [--from <date>] [--to <date>] [--tag <tag>] [--running-balance]
         \\
     );

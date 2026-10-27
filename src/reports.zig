@@ -16,6 +16,15 @@ pub const BalanceSort = enum {
     amount,
 };
 
+pub const TagFilter = union(enum) {
+    exact: []const u8,
+    prefix: []const u8,
+};
+
+pub const BalanceFilter = struct {
+    tag: ?TagFilter = null,
+};
+
 pub const Balance = struct {
     account: ledger.AccountIndex,
     amount: core.Amount,
@@ -80,6 +89,7 @@ pub const PrefixBalanceReport = struct {
 pub fn calculateBalances(
     allocator: std.mem.Allocator,
     journal: *const ledger.Journal,
+    filter: BalanceFilter,
 ) (std.mem.Allocator.Error || ReportError)!BalanceReport {
     var balances: std.ArrayList(Balance) = .empty;
     errdefer balances.deinit(allocator);
@@ -88,6 +98,12 @@ pub fn calculateBalances(
     defer indices.deinit();
 
     for (journal.transactions.items) |transaction| {
+        if (filter.tag) |tag_filter| {
+            if (!transactionMatchesTag(transaction, tag_filter)) {
+                continue;
+            }
+        }
+
         for (transaction.postings.items) |posting| {
             const account = journal.accountFromIndex(posting.account).?;
             const increases_normal_balance = switch (account.account_type) {
@@ -141,6 +157,7 @@ pub fn calculatePrefixBalances(
     journal: *const ledger.Journal,
     prefix: []const u8,
     sort: BalanceSort,
+    filter: BalanceFilter,
 ) (std.mem.Allocator.Error || ReportError || error{InvalidAccountPrefix})!PrefixBalanceReport {
     if (!ledger.isValidAccountPrefix(prefix)) {
         return error.InvalidAccountPrefix;
@@ -155,7 +172,7 @@ pub fn calculatePrefixBalances(
     var indices = std.AutoHashMap(core.CommodityId, usize).init(allocator);
     defer indices.deinit();
 
-    var all_balances = try calculateBalances(allocator, journal);
+    var all_balances = try calculateBalances(allocator, journal, filter);
     defer all_balances.deinit();
 
     for (all_balances.balances.items) |balance| {
@@ -344,19 +361,36 @@ fn matchesInspectFilter(transaction: ledger.Transaction, filter: InspectFilter) 
     }
 
     if (filter.tag) |tag| {
-        var found = false;
-        for (transaction.tags.items) |transaction_tag| {
-            if (std.mem.eql(u8, transaction_tag, tag)) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
+        if (!transactionMatchesTag(transaction, .{ .exact = tag })) {
             return false;
         }
     }
 
     return true;
+}
+
+fn transactionMatchesTag(transaction: ledger.Transaction, filter: TagFilter) bool {
+    for (transaction.tags.items) |tag| {
+        const matches = switch (filter) {
+            .exact => |expected| std.mem.eql(u8, tag, expected),
+            .prefix => |prefix| matchesTagPrefix(tag, prefix),
+        };
+        if (matches) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+fn matchesTagPrefix(tag: []const u8, prefix: []const u8) bool {
+    if (std.mem.eql(u8, tag, prefix)) {
+        return true;
+    }
+
+    return tag.len > prefix.len and
+        std.mem.startsWith(u8, tag, prefix) and
+        tag[prefix.len] == ':';
 }
 
 fn removeZeroBalances(balances: *std.ArrayList(Balance)) void {
@@ -449,7 +483,7 @@ test "calculate natural accounting balances" {
         .amount = amount,
     });
 
-    var report = try calculateBalances(std.testing.allocator, &journal);
+    var report = try calculateBalances(std.testing.allocator, &journal, .{});
     defer report.deinit();
 
     try std.testing.expectEqual(@as(usize, 2), report.balances.items.len);
@@ -492,7 +526,7 @@ test "aggregate balances by component-aware account prefix" {
         });
     }
 
-    var report = try calculatePrefixBalances(std.testing.allocator, &journal, "asset:bank", .account);
+    var report = try calculatePrefixBalances(std.testing.allocator, &journal, "asset:bank", .account, .{});
     defer report.deinit();
 
     try std.testing.expectEqual(@as(usize, 2), report.amounts.items.len);
@@ -507,6 +541,7 @@ test "aggregate balances by component-aware account prefix" {
         &journal,
         "asset:bank",
         .amount,
+        .{},
     );
     defer amount_sorted.deinit();
 
@@ -515,8 +550,74 @@ test "aggregate balances by component-aware account prefix" {
 
     try std.testing.expectError(
         error.InvalidAccountPrefix,
-        calculatePrefixBalances(std.testing.allocator, &journal, "asset:Bank", .account),
+        calculatePrefixBalances(std.testing.allocator, &journal, "asset:Bank", .account, .{}),
     );
+}
+
+test "filter balances by exact and component-aware tag prefix" {
+    var journal = try ledger.Journal.init(std.testing.allocator, 1, "tagged-balances");
+    defer journal.deinit();
+
+    const bank = try journal.addAccount("asset:bank");
+    const food = try journal.addAccount("expense:food");
+    const travel = try journal.addAccount("expense:travel");
+
+    const entries = [_]struct {
+        tag: []const u8,
+        account: ledger.AccountIndex,
+        amount: []const u8,
+    }{
+        .{ .tag = "trip:japan", .account = travel, .amount = "100.00" },
+        .{ .tag = "trip:korea", .account = food, .amount = "50.00" },
+        .{ .tag = "trips:japan", .account = travel, .amount = "25.00" },
+    };
+
+    for (entries, 0..) |entry, index| {
+        const transaction = try journal.addTransaction(.{
+            .date = try core.Date.init(2026, .jan, @intCast(index + 1)),
+        });
+        try journal.addTransactionTag(transaction, entry.tag);
+
+        const amount = try journal.catalog.parseAmount(entry.amount, "AUD");
+        try journal.addPosting(transaction, .{
+            .direction = .debit,
+            .account = entry.account,
+            .amount = amount,
+        });
+        try journal.addPosting(transaction, .{
+            .direction = .credit,
+            .account = bank,
+            .amount = amount,
+        });
+    }
+
+    var exact = try calculateBalances(std.testing.allocator, &journal, .{
+        .tag = .{ .exact = "trip:japan" },
+    });
+    defer exact.deinit();
+
+    try std.testing.expectEqual(@as(usize, 2), exact.balances.items.len);
+    try std.testing.expectEqual(@as(i64, -10_000), exact.balances.items[0].amount.value);
+    try std.testing.expectEqual(@as(i64, 10_000), exact.balances.items[1].amount.value);
+
+    var prefix = try calculatePrefixBalances(
+        std.testing.allocator,
+        &journal,
+        "expense",
+        .account,
+        .{ .tag = .{ .prefix = "trip" } },
+    );
+    defer prefix.deinit();
+
+    try std.testing.expectEqual(@as(usize, 2), prefix.balances.items.len);
+    try std.testing.expectEqual(@as(usize, 1), prefix.amounts.items.len);
+    try std.testing.expectEqual(@as(i64, 15_000), prefix.amounts.items[0].value);
+
+    var no_exact_match = try calculateBalances(std.testing.allocator, &journal, .{
+        .tag = .{ .exact = "trip" },
+    });
+    defer no_exact_match.deinit();
+    try std.testing.expectEqual(@as(usize, 0), no_exact_match.balances.items.len);
 }
 
 test "inspect transactions with structured filters and chronological ordering" {
@@ -627,7 +728,7 @@ test "report separate balances per commodity" {
         .amount = usd,
     });
 
-    var report = try calculateBalances(std.testing.allocator, &journal);
+    var report = try calculateBalances(std.testing.allocator, &journal, .{});
     defer report.deinit();
 
     try std.testing.expectEqual(@as(usize, 4), report.balances.items.len);

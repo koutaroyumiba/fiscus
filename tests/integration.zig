@@ -251,7 +251,7 @@ test "decode exact total posting valuation" {
             );
             try std.testing.expectEqual(@as(i64, 780), valuation.value);
 
-            var report = try fiscus.reports.calculateBalances(std.testing.allocator, &journal);
+            var report = try fiscus.reports.calculateBalances(std.testing.allocator, &journal, .{});
             defer report.deinit();
 
             try expectBalance(&journal, &report, "asset:broker:shares", "NZX.AIR", "10.000000");
@@ -357,7 +357,7 @@ test "load activity coverage workspace" {
             try std.testing.expectEqual(@as(u8, 6), air.scale);
             try std.testing.expectEqualStrings("Air New Zealand", air.name.?);
 
-            var report = try fiscus.reports.calculateBalances(std.testing.allocator, &journal);
+            var report = try fiscus.reports.calculateBalances(std.testing.allocator, &journal, .{});
             defer report.deinit();
 
             try std.testing.expectEqual(@as(usize, 21), report.balances.items.len);
