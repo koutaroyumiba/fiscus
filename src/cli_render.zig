@@ -145,7 +145,7 @@ test "render inspected transaction in canonical form" {
     const income = try journal.addAccount("income:salary");
     const amount = try journal.catalog.parseAmount("100.00", "AUD");
     const transaction = try journal.addTransaction(.{
-        .date = try fiscus.core.Date.parse("2026-01-15"),
+        .date = try fiscus.ledger.Date.parse("2026-01-15"),
         .id = "salary-1",
         .narration = "Salary",
         .note = "Monthly pay",

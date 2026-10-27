@@ -1,7 +1,6 @@
 const std = @import("std");
 
 const ledger = @import("ledger/root.zig");
-const core = ledger.Core;
 const loader = @import("loader.zig");
 const reports = @import("reports.zig");
 const source_manager = @import("source_manager.zig");
@@ -23,16 +22,16 @@ pub const BalanceQuery = struct {
 pub const InspectQuery = struct {
     id: ?[]const u8 = null,
     account: ?[]const u8 = null,
-    from: ?core.Date = null,
-    to: ?core.Date = null,
+    from: ?ledger.Date = null,
+    to: ?ledger.Date = null,
     tag: ?[]const u8 = null,
 };
 
 pub const AccountRegisterQuery = struct {
     account: []const u8,
     id: ?[]const u8 = null,
-    from: ?core.Date = null,
-    to: ?core.Date = null,
+    from: ?ledger.Date = null,
+    to: ?ledger.Date = null,
     tag: ?[]const u8 = null,
 };
 

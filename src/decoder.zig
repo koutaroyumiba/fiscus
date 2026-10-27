@@ -4,8 +4,6 @@ const ast = @import("lang/ast.zig");
 const ledger = @import("ledger/root.zig");
 const source = @import("lang/source.zig");
 
-const core = ledger.Core;
-
 pub const FailureKind = enum {
     invalid_version,
     unsupported_version,
@@ -150,7 +148,7 @@ pub const Decoder = struct {
             const scale = std.fmt.parseInt(u8, comm.scale.lexeme, 10) catch {
                 return self.fail(.invalid_commodity_scale, comm.scale.span);
             };
-            const kind: core.CommodityKind = switch (comm.kind) {
+            const kind: ledger.CommodityKind = switch (comm.kind) {
                 .currency => .currency,
                 .security => .security,
                 .custom => .custom,
@@ -179,7 +177,7 @@ pub const Decoder = struct {
         for (accounts) |account| {
             _ = try self.inferAccountType(account);
 
-            const account_commodity: ?core.CommodityId = if (account.commodity) |token|
+            const account_commodity: ?ledger.CommodityId = if (account.commodity) |token|
                 journal.catalog.idFromSymbol(token.lexeme) orelse
                     return self.fail(.unknown_account_commodity, token.span)
             else
@@ -288,7 +286,7 @@ pub const Decoder = struct {
     }
 
     fn decodeTransaction(self: *Self, journal: *ledger.Journal, transaction: ast.TransactionStmt) !void {
-        const date = core.Date.parse(transaction.date.lexeme) catch {
+        const date = ledger.Date.parse(transaction.date.lexeme) catch {
             return self.fail(.invalid_date, transaction.date.span);
         };
         const narration = if (transaction.narration) |token| token.lexeme else null;
@@ -399,7 +397,7 @@ pub const Decoder = struct {
             };
         };
 
-        const valuation: ?core.Amount = if (posting.valuation) |expression|
+        const valuation: ?ledger.Amount = if (posting.valuation) |expression|
             journal.catalog.parseAmount(expression.amount.lexeme, expression.commodity.lexeme) catch |err| {
                 return switch (err) {
                     error.UnknownCommodity => self.fail(.unknown_valuation_commodity, expression.commodity.span),

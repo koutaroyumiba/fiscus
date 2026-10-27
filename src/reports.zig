@@ -2,13 +2,11 @@ const std = @import("std");
 
 const ledger = @import("ledger/root.zig");
 
-const core = ledger.Core;
-
 pub const ReportError = error{Overflow};
 
 const BalanceKey = struct {
     account: ledger.AccountIndex,
-    commodity: core.CommodityId,
+    commodity: ledger.CommodityId,
 };
 
 pub const BalanceSort = enum {
@@ -27,14 +25,14 @@ pub const BalanceFilter = struct {
 
 pub const Balance = struct {
     account: ledger.AccountIndex,
-    amount: core.Amount,
+    amount: ledger.Amount,
 };
 
 pub const InspectFilter = struct {
     id: ?[]const u8 = null,
     account: ?ledger.AccountIndex = null,
-    from: ?core.Date = null,
-    to: ?core.Date = null,
+    from: ?ledger.Date = null,
+    to: ?ledger.Date = null,
     tag: ?[]const u8 = null,
 };
 
@@ -50,8 +48,8 @@ pub const InspectReport = struct {
 
 pub const AccountRegisterEntry = struct {
     transaction: ledger.TransactionIndex,
-    change: core.Amount,
-    balance: core.Amount,
+    change: ledger.Amount,
+    balance: ledger.Amount,
 };
 
 pub const AccountRegisterReport = struct {
@@ -76,7 +74,7 @@ pub const BalanceReport = struct {
 
 pub const PrefixBalanceReport = struct {
     allocator: std.mem.Allocator,
-    amounts: std.ArrayList(core.Amount),
+    amounts: std.ArrayList(ledger.Amount),
     balances: std.ArrayList(Balance),
 
     pub fn deinit(self: *PrefixBalanceReport) void {
@@ -163,13 +161,13 @@ pub fn calculatePrefixBalances(
         return error.InvalidAccountPrefix;
     }
 
-    var amounts: std.ArrayList(core.Amount) = .empty;
+    var amounts: std.ArrayList(ledger.Amount) = .empty;
     errdefer amounts.deinit(allocator);
 
     var balances: std.ArrayList(Balance) = .empty;
     errdefer balances.deinit(allocator);
 
-    var indices = std.AutoHashMap(core.CommodityId, usize).init(allocator);
+    var indices = std.AutoHashMap(ledger.CommodityId, usize).init(allocator);
     defer indices.deinit();
 
     var all_balances = try calculateBalances(allocator, journal, filter);
@@ -203,7 +201,7 @@ pub fn calculatePrefixBalances(
         ) catch return error.Overflow;
     }
 
-    std.mem.sort(core.Amount, amounts.items, {}, lessThanAmount);
+    std.mem.sort(ledger.Amount, amounts.items, {}, lessThanAmount);
     std.mem.sort(
         Balance,
         balances.items,
@@ -253,10 +251,10 @@ pub fn calculateAccountRegister(
     var entries: std.ArrayList(AccountRegisterEntry) = .empty;
     errdefer entries.deinit(allocator);
 
-    var balances = std.AutoHashMap(core.CommodityId, i64).init(allocator);
+    var balances = std.AutoHashMap(ledger.CommodityId, i64).init(allocator);
     defer balances.deinit();
 
-    var changes: std.ArrayList(core.Amount) = .empty;
+    var changes: std.ArrayList(ledger.Amount) = .empty;
     defer changes.deinit(allocator);
 
     var history = try inspectTransactions(allocator, journal, .{ .account = account_index });
@@ -283,7 +281,7 @@ pub fn calculateAccountRegister(
             else
                 std.math.negate(posting.amount.value) catch return error.Overflow;
 
-            var existing: ?*core.Amount = null;
+            var existing: ?*ledger.Amount = null;
             for (changes.items) |*change| {
                 if (change.commodity == posting.amount.commodity) {
                     existing = change;
@@ -301,7 +299,7 @@ pub fn calculateAccountRegister(
             }
         }
 
-        std.mem.sort(core.Amount, changes.items, {}, lessThanAmount);
+        std.mem.sort(ledger.Amount, changes.items, {}, lessThanAmount);
         const include = matchesInspectFilter(transaction, display_filter);
 
         for (changes.items) |change| {
@@ -416,7 +414,7 @@ fn lessThanBalance(_: void, left: Balance, right: Balance) bool {
     return left.amount.commodity < right.amount.commodity;
 }
 
-fn lessThanAmount(_: void, left: core.Amount, right: core.Amount) bool {
+fn lessThanAmount(_: void, left: ledger.Amount, right: ledger.Amount) bool {
     return left.commodity < right.commodity;
 }
 
@@ -467,7 +465,7 @@ test "calculate natural accounting balances" {
     const opening = try journal.addAccount("equity:opening-balances");
 
     const transaction = try journal.addTransaction(.{
-        .date = try core.Date.parse("2026-01-01"),
+        .date = try ledger.Date.parse("2026-01-01"),
         .narration = "Opening balance",
     });
     const amount = try journal.catalog.parseAmount("1000.00", "AUD");
@@ -503,7 +501,7 @@ test "aggregate balances by component-aware account prefix" {
     const larger_aud = try journal.catalog.parseAmount("200.00", "AUD");
     const usd = try journal.catalog.parseAmount("25.00", "USD");
 
-    const entries = [_]struct { account: ledger.AccountIndex, amount: core.Amount }{
+    const entries = [_]struct { account: ledger.AccountIndex, amount: ledger.Amount }{
         .{ .account = checking, .amount = aud },
         .{ .account = savings, .amount = larger_aud },
         .{ .account = checking, .amount = usd },
@@ -512,7 +510,7 @@ test "aggregate balances by component-aware account prefix" {
 
     for (entries, 0..) |entry, index| {
         const transaction = try journal.addTransaction(.{
-            .date = try core.Date.init(2026, .jan, @intCast(index + 1)),
+            .date = try ledger.Date.init(2026, .jan, @intCast(index + 1)),
         });
         try journal.addPosting(transaction, .{
             .direction = .debit,
@@ -574,7 +572,7 @@ test "filter balances by exact and component-aware tag prefix" {
 
     for (entries, 0..) |entry, index| {
         const transaction = try journal.addTransaction(.{
-            .date = try core.Date.init(2026, .jan, @intCast(index + 1)),
+            .date = try ledger.Date.init(2026, .jan, @intCast(index + 1)),
         });
         try journal.addTransactionTag(transaction, entry.tag);
 
@@ -630,7 +628,7 @@ test "inspect transactions with structured filters and chronological ordering" {
     const amount = try journal.catalog.parseAmount("10.00", "AUD");
 
     const later = try journal.addTransaction(.{
-        .date = try core.Date.parse("2026-02-01"),
+        .date = try ledger.Date.parse("2026-02-01"),
         .id = "groceries-1",
         .narration = "Groceries",
     });
@@ -639,7 +637,7 @@ test "inspect transactions with structured filters and chronological ordering" {
     try journal.addPosting(later, .{ .direction = .credit, .account = bank, .amount = amount });
 
     const earlier = try journal.addTransaction(.{
-        .date = try core.Date.parse("2026-01-01"),
+        .date = try ledger.Date.parse("2026-01-01"),
         .narration = "Opening balance",
     });
     try journal.addPosting(earlier, .{ .direction = .debit, .account = bank, .amount = amount });
@@ -656,8 +654,8 @@ test "inspect transactions with structured filters and chronological ordering" {
     var filtered = try inspectTransactions(std.testing.allocator, &journal, .{
         .id = "groceries-1",
         .account = groceries,
-        .from = try core.Date.parse("2026-02-01"),
-        .to = try core.Date.parse("2026-02-01"),
+        .from = try ledger.Date.parse("2026-02-01"),
+        .to = try ledger.Date.parse("2026-02-01"),
         .tag = "food",
     });
     defer filtered.deinit();
@@ -676,7 +674,7 @@ test "inspect transactions with structured filters and chronological ordering" {
     try std.testing.expectEqual(@as(usize, 0), unknown_id.transactions.items.len);
 
     var account_register = try calculateAccountRegister(std.testing.allocator, &journal, bank, .{
-        .from = try core.Date.parse("2026-02-01"),
+        .from = try ledger.Date.parse("2026-02-01"),
         .tag = "food",
     });
     defer account_register.deinit();
@@ -695,7 +693,7 @@ test "report separate balances per commodity" {
     const opening = try journal.addAccount("equity:opening-balances");
 
     const aud_transaction = try journal.addTransaction(.{
-        .date = try core.Date.parse("2026-01-01"),
+        .date = try ledger.Date.parse("2026-01-01"),
         .narration = "AUD opening balance",
     });
     const aud = try journal.catalog.parseAmount("100.00", "AUD");
@@ -712,7 +710,7 @@ test "report separate balances per commodity" {
     });
 
     const usd_transaction = try journal.addTransaction(.{
-        .date = try core.Date.parse("2026-01-01"),
+        .date = try ledger.Date.parse("2026-01-01"),
         .narration = "USD opening balance",
     });
     const usd = try journal.catalog.parseAmount("50.00", "USD");

@@ -353,7 +353,7 @@ test "load activity coverage workspace" {
 
             const air_id = journal.catalog.idFromSymbol("NZX.AIR") orelse return error.ExpectedCommodity;
             const air = journal.catalog.commodityFromId(air_id).?;
-            try std.testing.expectEqual(fiscus.core.CommodityKind.security, air.kind);
+            try std.testing.expectEqual(fiscus.ledger.CommodityKind.security, air.kind);
             try std.testing.expectEqual(@as(u8, 6), air.scale);
             try std.testing.expectEqualStrings("Air New Zealand", air.name.?);
 
