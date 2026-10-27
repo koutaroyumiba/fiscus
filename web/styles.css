@@ -192,6 +192,44 @@ tbody tr:hover { background: #f7f6ef; }
 .legend-item i { width: 7px; height: 7px; border-radius: 50%; }
 .legend-item strong { font: 500 8px var(--mono); }
 
+/* Trip journal */
+.trip-switcher { display: flex; gap: 10px; margin: 0 0 18px; padding: 2px 2px 8px; overflow-x: auto; scrollbar-width: thin; }
+.trip-ticket { min-width: 190px; display: grid; grid-template-columns: 1fr auto; gap: 5px 14px; padding: 14px 16px; border: 1px solid var(--line); color: var(--ink); background: var(--panel); text-align: left; cursor: pointer; transition: transform .18s, border-color .18s, box-shadow .18s; }
+.trip-ticket span { font: 600 14px var(--serif); }
+.trip-ticket small { grid-column: 1; color: #7d867e; font: 400 7px var(--mono); text-transform: uppercase; }
+.trip-ticket strong { grid-column: 2; grid-row: 1 / span 2; align-self: center; font: 500 11px var(--mono); }
+.trip-ticket:hover { transform: translateY(-2px); border-color: var(--green-2); }
+.trip-ticket.active { color: white; background: var(--green); border-color: var(--green); box-shadow: inset 0 -3px 0 var(--lime); }
+.trip-ticket.active small { color: #c5d6ca; }
+.trip-hero { position: relative; min-height: 330px; padding: clamp(28px,4vw,55px); color: #f7f4e9; background: var(--green); overflow: hidden; animation: rise .45s both; }
+.trip-hero::before { content: ""; position: absolute; width: 390px; height: 390px; right: -110px; top: -190px; border: 1px solid rgba(217,239,134,.25); border-radius: 50%; box-shadow: 0 0 0 55px rgba(217,239,134,.035), 0 0 0 110px rgba(217,239,134,.025); }
+.trip-hero::after { content: "FISCUS / FIELD LEDGER"; position: absolute; right: 22px; bottom: 18px; color: rgba(255,255,255,.35); font: 400 7px var(--mono); letter-spacing: .16em; }
+.trip-kicker { color: var(--lime); font: 500 8px var(--mono); letter-spacing: .16em; }
+.trip-hero h2 { max-width: 68%; margin: 18px 0 5px; font: italic 500 clamp(42px,6vw,78px)/.9 var(--serif); letter-spacing: -.04em; }
+.trip-hero > p { margin: 15px 0 0; color: #b9c9be; font: 400 9px var(--mono); }
+.trip-total { position: absolute; top: 50px; right: clamp(35px,7vw,105px); z-index: 1; display: flex; flex-direction: column; text-align: right; }
+.trip-total span, .trip-total small { color: #b7c9bc; font: 400 7px var(--mono); text-transform: uppercase; letter-spacing: .1em; }
+.trip-total strong { margin: 9px 0 7px; color: var(--lime); font: 500 clamp(28px,3vw,43px) var(--serif); }
+.trip-facts { position: absolute; left: clamp(28px,4vw,55px); right: clamp(28px,4vw,55px); bottom: 31px; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); border-top: 1px solid rgba(255,255,255,.18); }
+.trip-facts div { padding: 19px 18px 0 0; }
+.trip-facts span { display: block; margin-bottom: 7px; color: #9eb0a4; font: 400 7px var(--mono); text-transform: uppercase; letter-spacing: .1em; }
+.trip-facts strong { font: 500 14px var(--serif); }
+.trip-route { position: absolute; left: 47%; top: 42%; width: 130px; display: flex; align-items: center; opacity: .3; transform: rotate(-10deg); }
+.trip-route i { width: 8px; height: 8px; border: 1px solid var(--lime); border-radius: 50%; }
+.trip-route span { flex: 1; border-top: 1px dashed var(--lime); }
+.trip-grid { display: grid; grid-template-columns: minmax(0,1.35fr) minmax(260px,.65fr); gap: 18px; margin-top: 18px; }
+.trip-note-list { padding: 9px 20px 18px; }
+.trip-note-list div { display: flex; align-items: baseline; justify-content: space-between; gap: 15px; padding: 13px 0; border-bottom: 1px solid #e3e2d8; }
+.trip-note-list div:last-child { border-bottom: 0; }
+.trip-note-list span { color: #768078; font: 400 8px var(--mono); text-transform: uppercase; }
+.trip-note-list strong { font: 500 11px var(--serif); text-align: right; }
+.trip-ledger { margin-bottom: 20px; }
+.trip-empty { min-height: 430px; display: grid; place-content: center; justify-items: start; padding: clamp(35px,8vw,100px); border: 1px dashed #aeb7ad; background: radial-gradient(circle at 80% 20%, rgba(217,239,134,.35), transparent 27%), var(--panel); }
+.trip-empty h2 { max-width: 600px; margin: 22px 0 12px; font: 500 clamp(34px,5vw,62px)/.95 var(--serif); letter-spacing: -.035em; }
+.trip-empty p { max-width: 570px; color: var(--ink-soft); font-size: 13px; line-height: 1.7; }
+.trip-empty code { padding: 3px 6px; color: var(--green); background: #e4eddc; font-family: var(--mono); }
+.trip-stamp { padding: 7px 10px; border: 1px solid var(--green-2); color: var(--green-2); font: 500 8px var(--mono); letter-spacing: .15em; transform: rotate(-2deg); }
+
 .toast { position: fixed; left: 50%; bottom: 30px; z-index: 200; padding: 11px 16px; color: white; background: var(--ink); box-shadow: 0 8px 25px rgba(0,0,0,.2); font: 400 9px var(--mono); opacity: 0; transform: translate(-50%,15px); pointer-events: none; transition: .25s; }
 .toast.show { opacity: 1; transform: translate(-50%,0); }
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -202,7 +240,7 @@ tbody tr:hover { background: #f7f6ef; }
   .metric-grid { grid-template-columns: 1fr 1fr; }
   .metric:nth-child(2) { border-right: 0; }
   .metric:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
-  .dashboard-grid, .report-grid { grid-template-columns: 1fr; }
+  .dashboard-grid, .report-grid, .trip-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
   .welcome { background: var(--paper); }
@@ -234,5 +272,12 @@ tbody tr:hover { background: #f7f6ef; }
   .metric:last-child { border-bottom: 0; }
   .account-summary { grid-template-columns: 1fr; }
   .donut-section { flex-direction: column; }
+  .trip-hero { min-height: 440px; }
+  .trip-hero h2 { max-width: 100%; }
+  .trip-total { position: static; margin-top: 28px; text-align: left; }
+  .trip-facts { grid-template-columns: 1fr; bottom: 22px; }
+  .trip-facts div { display: flex; justify-content: space-between; padding-top: 11px; }
+  .trip-facts span { margin: 0; }
+  .trip-route { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; } }

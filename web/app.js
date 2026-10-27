@@ -112,11 +112,30 @@ txn 2025-12-12 "Apartment rent" {
   + expense:housing:rent 2150.00
   - asset:bank:harbour:everyday 2150.00
 }
-txn 2025-12-19 "Coastal weekend" {
+txn 2025-12-19 "Coastal train" {
+  tag travel
+  tag trip:coastal-weekend
+  + expense:transport:public 84.00
+  - liability:credit-card:harbour 84.00
+}
+txn 2025-12-19 "Harbour cottage" {
   tag travel
   tag shared
-  + expense:travel:weekend 684.50
-  - liability:credit-card:harbour 684.50
+  tag trip:coastal-weekend
+  + expense:travel:weekend 520.00
+  - liability:credit-card:harbour 520.00
+}
+txn 2025-12-20 "Dinner by the water" {
+  tag food
+  tag trip:coastal-weekend
+  + expense:food:dining 112.50
+  - liability:credit-card:harbour 112.50
+}
+txn 2025-12-21 "Bakery before home" {
+  tag food
+  tag trip:coastal-weekend
+  + expense:food:dining 38.00
+  - liability:credit-card:harbour 38.00
 }
 txn 2025-12-31 "Savings interest" {
   tag income:interest
@@ -168,7 +187,7 @@ txn 2026-02-12 "Apartment rent" {
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
-const state = { journal: null, view: "overview", account: "", tag: "", commodity: "", search: "" };
+const state = { journal: null, view: "overview", account: "", tag: "", trip: "", commodity: "", search: "" };
 const colors = ["#2d7455", "#eb765d", "#e7c866", "#78aeb1", "#8a7355", "#9eb66c", "#c08b78"];
 
 function tokenize(source, filename) {
@@ -337,11 +356,12 @@ async function openFiles(files) {
 
 function loadJournal(journal) {
   state.journal = journal;
-  state.view = "overview"; state.account = ""; state.tag = ""; state.search = "";
+  state.view = "overview"; state.account = ""; state.tag = ""; state.trip = ""; state.search = "";
   state.commodity = journal.commodities.includes("AUD") ? "AUD" : journal.commodities[0] || "AUD";
   $("#welcome").hidden = true; $("#dashboard").hidden = false;
   $("#journal-name").textContent = journal.name;
   $("#transaction-count").textContent = journal.transactions.length;
+  $("#trip-count").textContent = tripNamespaces().length || "";
   $("#search-input").value = "";
   populateFilters();
   render();
@@ -374,13 +394,31 @@ function accountMatchesFilter(account) {
   return !state.account || account === state.account || account.startsWith(`${state.account}:`);
 }
 
+function tagMatchesPrefix(tag, prefix) {
+  return tag === prefix || tag.startsWith(`${prefix}:`);
+}
+
+function transactionMatchesTagPrefix(transaction, prefix) {
+  return transaction.tags.some(tag => tagMatchesPrefix(tag, prefix));
+}
+
+function tripNamespaces() {
+  const trips = new Set();
+  state.journal?.transactions.forEach(transaction => transaction.tags.forEach(tag => {
+    const parts = tag.split(":");
+    if (parts[0] === "trip" && parts.length >= 2) trips.add(parts.slice(0, 2).join(":"));
+  }));
+  return [...trips].sort();
+}
+
 function filteredTransactions() {
   const query = state.search.trim().toLowerCase();
   return state.journal.transactions.filter(txn => {
     const accountMatch = txn.postings.some(posting => accountMatchesFilter(posting.account));
     const tagMatch = !state.tag || txn.tags.includes(state.tag);
+    const tripMatch = state.view !== "trips" || !state.trip || transactionMatchesTagPrefix(txn, state.trip);
     const haystack = [txn.narration, txn.note, txn.id, txn.date, ...txn.tags, ...txn.postings.map(posting => posting.account)].filter(Boolean).join(" ").toLowerCase();
-    return accountMatch && tagMatch && (!query || haystack.includes(query));
+    return accountMatch && tagMatch && tripMatch && (!query || haystack.includes(query));
   });
 }
 
@@ -417,7 +455,7 @@ function friendlyAccount(name) { return name.split(":").slice(1).map(part => par
 function formatDate(date) { const parsed = new Date(`${date}T00:00:00`); return Number.isNaN(parsed.getTime()) ? date : parsed.toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" }); }
 
 function render() {
-  const titles = { overview: "Overview", transactions: "Transactions", accounts: "Accounts", reports: "Reports" };
+  const titles = { overview: "Overview", transactions: "Transactions", accounts: "Accounts", trips: "Trip journal", reports: "Reports" };
   $("#view-title").textContent = titles[state.view];
   $$(".nav-item").forEach(button => button.classList.toggle("active", button.dataset.view === state.view));
   const notice = $("#notice");
@@ -426,6 +464,7 @@ function render() {
   if (state.view === "overview") renderOverview();
   if (state.view === "transactions") renderTransactions();
   if (state.view === "accounts") renderAccounts();
+  if (state.view === "trips") renderTrips();
   if (state.view === "reports") renderReports();
 }
 
@@ -526,6 +565,71 @@ function renderAccounts() {
   <section class="card"><div class="card-head"><div><h3>Account balances</h3><span>Natural accounting sign · ${state.commodity}</span></div></div><div class="table-wrap"><table><thead><tr><th>Account</th><th>Type</th><th style="text-align:right">Balance</th></tr></thead><tbody>${balances.map(([name, amount]) => `<tr><td class="account-name">${escapeHtml(name)}</td><td><span class="account-type">${escapeHtml(accountType(name))}</span>${escapeHtml(friendlyAccount(name))}</td><td class="${amount < 0 ? "balance-negative" : "balance-positive"}">${formatMoney(amount)}</td></tr>`).join("")}</tbody></table></div></section>`;
 }
 
+function friendlyTrip(tag) {
+  return tag.split(":").slice(1).map(part => part.replace(/[-_]/g, " ").replace(/\b\w/g, letter => letter.toUpperCase())).join(" · ");
+}
+
+function tripExpenseTotal(transactions) {
+  return transactions.reduce((total, transaction) => total + relevantPostings(transaction)
+    .filter(posting => accountType(posting.account) === "expense")
+    .reduce((sum, posting) => sum + naturalAmount(posting), 0), 0);
+}
+
+function renderTrips() {
+  const trips = tripNamespaces();
+  if (!trips.length) {
+    $("#content").innerHTML = `<section class="trip-empty"><span class="trip-stamp">NO TRIPS YET</span><h2>Give your next journey a namespace.</h2><p>Add <code>tag trip:japan</code> to each related transaction. Fiscus will gather the spending, categories, and daily ledger here automatically.</p></section>`;
+    return;
+  }
+
+  if (!trips.includes(state.trip)) state.trip = trips[0];
+  const allTripTransactions = prefix => state.journal.transactions.filter(transaction => transactionMatchesTagPrefix(transaction, prefix));
+  const transactions = filteredTransactions();
+  const chronological = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
+  const data = reportData(transactions);
+  const expenses = expenseAccounts(data.byAccount);
+  const total = expenses.reduce((sum, [, amount]) => sum + amount, 0);
+  const firstDate = chronological[0]?.date;
+  const lastDate = chronological.at(-1)?.date;
+  const duration = firstDate && lastDate ? Math.round((new Date(`${lastDate}T00:00:00`) - new Date(`${firstDate}T00:00:00`)) / 86400000) + 1 : 0;
+  const topCategory = expenses[0] ? friendlyAccount(expenses[0][0]) : "No expenses yet";
+
+  const selector = trips.map(trip => {
+    const tripTransactions = allTripTransactions(trip);
+    const tripTotal = tripExpenseTotal(tripTransactions);
+    return `<button class="trip-ticket ${trip === state.trip ? "active" : ""}" data-trip="${escapeHtml(trip)}" type="button"><span>${escapeHtml(friendlyTrip(trip))}</span><small>${tripTransactions.length} ${tripTransactions.length === 1 ? "entry" : "entries"}</small><strong>${formatMoney(tripTotal)}</strong></button>`;
+  }).join("");
+
+  $("#content").innerHTML = `<div class="trip-switcher" aria-label="Choose a trip">${selector}</div>
+    <section class="trip-hero">
+      <div class="trip-route" aria-hidden="true"><i></i><span></span><i></i></div>
+      <div class="trip-kicker">TRIP LEDGER / ${escapeHtml(state.commodity)}</div>
+      <h2>${escapeHtml(friendlyTrip(state.trip))}</h2>
+      <p>${firstDate ? `${escapeHtml(formatDate(firstDate))}${lastDate !== firstDate ? ` — ${escapeHtml(formatDate(lastDate))}` : ""}` : "No matching activity"}</p>
+      <div class="trip-total"><span>Total spent</span><strong>${formatMoney(total)}</strong><small>Across expense accounts</small></div>
+      <div class="trip-facts">
+        <div><span>Entries</span><strong>${transactions.length}</strong></div>
+        <div><span>Journey</span><strong>${duration || "—"}${duration ? " days" : ""}</strong></div>
+        <div><span>Top category</span><strong>${escapeHtml(topCategory)}</strong></div>
+      </div>
+    </section>
+    <div class="trip-grid">
+      <section class="card trip-breakdown"><div class="card-head"><div><h3>Where it went</h3><span>Expense accounts · ${escapeHtml(state.commodity)}</span></div></div>${breakdownHtml(data.byAccount)}</section>
+      <section class="card trip-notes"><div class="card-head"><div><h3>Field notes</h3><span>At a glance</span></div></div><div class="trip-note-list">
+        <div><span>First entry</span><strong>${firstDate ? escapeHtml(formatDate(firstDate)) : "—"}</strong></div>
+        <div><span>Last entry</span><strong>${lastDate ? escapeHtml(formatDate(lastDate)) : "—"}</strong></div>
+        <div><span>Average per entry</span><strong>${transactions.length ? formatMoney(total / transactions.length) : "—"}</strong></div>
+        <div><span>Tag namespace</span><strong>#${escapeHtml(state.trip)}:*</strong></div>
+      </div></section>
+    </div>
+    <section class="card table-card trip-ledger"><div class="card-head"><div><h3>Travel ledger</h3><span>${transactions.length} matching entries, newest first</span></div></div>${transactionTable(transactions)}</section>`;
+
+  $$('[data-trip]').forEach(button => button.addEventListener("click", () => {
+    state.trip = button.dataset.trip;
+    render();
+  }));
+}
+
 function renderReports() {
   const transactions = filteredTransactions();
   const data = reportData(transactions);
@@ -569,6 +673,6 @@ $$(".nav-item").forEach(button => button.addEventListener("click", () => { state
 $("#account-filter").addEventListener("change", event => { state.account = event.target.value; render(); });
 $("#commodity-filter").addEventListener("change", event => { state.commodity = event.target.value; render(); });
 $("#tag-chips").addEventListener("click", event => { const button = event.target.closest("[data-tag]"); if (!button) return; state.tag = button.dataset.tag; $$(".tag-chip").forEach(chip => chip.classList.toggle("active", chip === button)); render(); });
-$("#search-input").addEventListener("input", event => { state.search = event.target.value; if (state.view === "overview" || state.view === "transactions") render(); });
+$("#search-input").addEventListener("input", event => { state.search = event.target.value; if (["overview", "transactions", "trips"].includes(state.view)) render(); });
 $("#clear-filters").addEventListener("click", () => { state.account = ""; state.tag = ""; state.search = ""; $("#account-filter").value = ""; $("#search-input").value = ""; $$(".tag-chip").forEach(chip => chip.classList.toggle("active", chip.dataset.tag === "")); render(); });
 document.addEventListener("keydown", event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); $("#search-input").focus(); } });
