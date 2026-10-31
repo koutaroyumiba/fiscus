@@ -44,7 +44,10 @@ pub const Catalog = struct {
         try self.addBuiltinCurrency("AUD", 2);
         try self.addBuiltinCurrency("HKD", 2);
         try self.addBuiltinCurrency("JPY", 0);
+        try self.addBuiltinCurrency("MYR", 2);
         try self.addBuiltinCurrency("NZD", 2);
+        try self.addBuiltinCurrency("SGD", 2);
+        try self.addBuiltinCurrency("TWD", 2);
         try self.addBuiltinCurrency("USD", 2);
         try self.addBuiltinCurrency("VND", 0);
 
