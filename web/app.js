@@ -187,7 +187,7 @@ txn 2026-02-12 "Apartment rent" {
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
-const state = { journal: null, view: "overview", account: "", tag: "", trip: "", commodity: "", search: "" };
+const state = { journal: null, view: "overview", account: "", tag: "", trip: "", commodity: "", baseCommodity: "AUD", valueMode: "native", rateGraph: null, search: "" };
 const colors = ["#2d7455", "#eb765d", "#e7c866", "#78aeb1", "#8a7355", "#9eb66c", "#c08b78"];
 
 function tokenize(source, filename) {
@@ -307,7 +307,10 @@ function combineDocuments(documents) {
   }));
   const declared = documents.flatMap(doc => doc.commodities);
   const commoditySymbols = new Set(declared.map(item => item.symbol));
-  transactions.forEach(transaction => transaction.postings.forEach(posting => { if (posting.commodity) commoditySymbols.add(posting.commodity); }));
+  transactions.forEach(transaction => transaction.postings.forEach(posting => {
+    if (posting.commodity) commoditySymbols.add(posting.commodity);
+    if (posting.valuation?.commodity) commoditySymbols.add(posting.valuation.commodity);
+  }));
   if (!commoditySymbols.size) commoditySymbols.add("AUD");
   return {
     name, accounts, transactions: transactions.sort((a, b) => b.date.localeCompare(a.date)),
@@ -356,8 +359,10 @@ async function openFiles(files) {
 
 function loadJournal(journal) {
   state.journal = journal;
-  state.view = "overview"; state.account = ""; state.tag = ""; state.trip = ""; state.search = "";
+  state.view = "overview"; state.account = ""; state.tag = ""; state.trip = ""; state.search = ""; state.valueMode = "native";
   state.commodity = journal.commodities.includes("AUD") ? "AUD" : journal.commodities[0] || "AUD";
+  state.baseCommodity = journal.commodities.includes("AUD") ? "AUD" : journal.commodities[0] || "AUD";
+  state.rateGraph = FiscusConversion.buildRateGraph(journal.transactions);
   $("#welcome").hidden = true; $("#dashboard").hidden = false;
   $("#journal-name").textContent = journal.name;
   $("#transaction-count").textContent = journal.transactions.length;
@@ -386,8 +391,19 @@ function populateFilters() {
   $("#account-filter").innerHTML = `<option value="">All accounts</option>${accountOptions}`;
   const tags = [...new Set(state.journal.transactions.flatMap(txn => txn.tags))].sort();
   $("#tag-chips").innerHTML = `<button class="tag-chip active" data-tag="" type="button">All</button>${tags.map(tag => `<button class="tag-chip" data-tag="${escapeHtml(tag)}" type="button">#${escapeHtml(tag)}</button>`).join("")}`;
-  $("#commodity-filter").innerHTML = state.journal.commodities.map(symbol => `<option value="${escapeHtml(symbol)}">${escapeHtml(symbol)}</option>`).join("");
-  $("#commodity-filter").value = state.commodity;
+  populateCommodityFilter();
+}
+
+function populateCommodityFilter() {
+  const converted = state.valueMode === "converted";
+  $("#commodity-label").textContent = converted ? "Base" : "Currency";
+  $("#commodity-filter").innerHTML = `${converted ? "" : '<option value="">All currencies</option>'}${state.journal.commodities.map(symbol => `<option value="${escapeHtml(symbol)}">${escapeHtml(symbol)}</option>`).join("")}`;
+  $("#commodity-filter").value = converted ? state.baseCommodity : state.commodity;
+  $$('[data-mode]').forEach(button => {
+    const active = button.dataset.mode === state.valueMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
 }
 
 function accountMatchesFilter(account) {
@@ -415,15 +431,24 @@ function filteredTransactions() {
   const query = state.search.trim().toLowerCase();
   return state.journal.transactions.filter(txn => {
     const accountMatch = txn.postings.some(posting => accountMatchesFilter(posting.account));
-    const tagMatch = !state.tag || txn.tags.includes(state.tag);
+    const tagMatch = !state.tag || transactionMatchesTagPrefix(txn, state.tag);
     const tripMatch = state.view !== "trips" || !state.trip || transactionMatchesTagPrefix(txn, state.trip);
     const haystack = [txn.narration, txn.note, txn.id, txn.date, ...txn.tags, ...txn.postings.map(posting => posting.account)].filter(Boolean).join(" ").toLowerCase();
     return accountMatch && tagMatch && tripMatch && (!query || haystack.includes(query));
   });
 }
 
-function relevantPostings(transaction) {
-  return transaction.postings.filter(posting => accountMatchesFilter(posting.account) && posting.commodity === state.commodity);
+function visibleCommodities() {
+  return state.commodity ? [state.commodity] : state.journal.commodities;
+}
+
+function commodityLabel() {
+  if (state.valueMode === "converted") return `Converted to ${state.baseCommodity}`;
+  return state.commodity || "All currencies";
+}
+
+function relevantPostings(transaction, commodity) {
+  return transaction.postings.filter(posting => accountMatchesFilter(posting.account) && posting.commodity === commodity);
 }
 
 function accountType(account) { return account.split(":")[0]; }
@@ -431,24 +456,54 @@ function naturalAmount(posting) {
   const debitNatural = ["asset", "expense"].includes(accountType(posting.account));
   return posting.amount * ((posting.direction === "debit") === debitNatural ? 1 : -1);
 }
-function reportData(transactions = filteredTransactions()) {
-  const totals = { asset: 0, liability: 0, equity: 0, income: 0, expense: 0 };
+function emptyTotals() { return { asset: 0, liability: 0, equity: 0, income: 0, expense: 0 }; }
+function reportData(transactions = filteredTransactions(), commodity = state.commodity) {
+  const totals = emptyTotals();
   const byAccount = new Map();
-  transactions.forEach(txn => relevantPostings(txn).forEach(posting => {
+  transactions.forEach(txn => relevantPostings(txn, commodity).forEach(posting => {
     const amount = naturalAmount(posting);
     const type = accountType(posting.account);
     totals[type] = (totals[type] || 0) + amount;
     byAccount.set(posting.account, (byAccount.get(posting.account) || 0) + amount);
   }));
-  return { totals, byAccount };
+  return { totals, byAccount, missing: new Set(), missingAccounts: new Set() };
 }
-function formatMoney(amount, compact = false) {
-  const commodity = state.commodity;
+function convertedReportData(transactions = filteredTransactions(), base = state.baseCommodity) {
+  const totals = emptyTotals();
+  const byAccount = new Map();
+  const missing = new Set();
+  const missingAccounts = new Set();
+  transactions.forEach(transaction => transaction.postings.filter(posting => accountMatchesFilter(posting.account)).forEach(posting => {
+    const rate = FiscusConversion.findRate(state.rateGraph, posting.commodity, base);
+    if (rate == null) { missing.add(posting.commodity); missingAccounts.add(posting.account); return; }
+    const amount = naturalAmount(posting) * rate;
+    const type = accountType(posting.account);
+    totals[type] = (totals[type] || 0) + amount;
+    byAccount.set(posting.account, (byAccount.get(posting.account) || 0) + amount);
+  }));
+  return { totals, byAccount, missing, missingAccounts };
+}
+function reportViews(transactions = filteredTransactions()) {
+  if (state.valueMode === "converted") {
+    return [{ commodity: state.baseCommodity, converted: true, data: convertedReportData(transactions) }];
+  }
+  return visibleCommodities().map(commodity => ({ commodity, converted: false, data: reportData(transactions, commodity) }));
+}
+function conversionNotice(reports) {
+  const missing = new Set(reports.flatMap(report => [...report.data.missing]));
+  if (!missing.size) return "";
+  return `<div class="conversion-note"><strong>Partial conversion</strong><span>No rate to ${escapeHtml(state.baseCommodity)} for ${[...missing].sort().map(escapeHtml).join(", ")}. Those amounts are excluded.</span></div>`;
+}
+function formatMoney(amount, compact = false, commodity = state.valueMode === "converted" ? state.baseCommodity : state.commodity) {
   const options = { minimumFractionDigits: compact ? 0 : 2, maximumFractionDigits: compact ? 1 : 2, ...(compact ? { notation: "compact" } : {}) };
   if (["AUD", "NZD", "USD", "JPY", "EUR", "GBP"].includes(commodity)) {
     return new Intl.NumberFormat("en", { style: "currency", currency: commodity, currencyDisplay: "narrowSymbol", ...options }).format(amount);
   }
   return `${new Intl.NumberFormat("en", options).format(amount)} ${commodity}`;
+}
+function moneyList(values, compact = false) {
+  if (values.length === 1) return formatMoney(values[0].amount, compact, values[0].commodity);
+  return `<span class="currency-values">${values.map(({ commodity, amount }) => `<span><small>${escapeHtml(commodity)}</small>${formatMoney(amount, compact, commodity)}</span>`).join("")}</span>`;
 }
 function escapeHtml(value = "") { return String(value).replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char])); }
 function friendlyAccount(name) { return name.split(":").slice(1).map(part => part.replace(/[-_]/g, " ")).join(" / "); }
@@ -468,46 +523,54 @@ function render() {
   if (state.view === "reports") renderReports();
 }
 
-function metricsHtml(data, transactionCount) {
-  const net = data.totals.asset - data.totals.liability;
-  const flow = data.totals.income - data.totals.expense;
+function metricsHtml(reports, transactionCount) {
+  const values = selector => reports.map(({ commodity, data }) => ({ commodity, amount: selector(data.totals) }));
   return `<div class="metric-grid">
-    ${metric("Net position", net, "Assets less liabilities")}
-    ${metric("Income", data.totals.income, "Filtered period", "#2d7455")}
-    ${metric("Expenses", data.totals.expense, "Filtered period", "#eb765d")}
-    ${metric("Net cash flow", flow, `${transactionCount} visible transactions`, "#e7c866")}
+    ${metric("Net position", values(totals => totals.asset - totals.liability), "Assets less liabilities")}
+    ${metric("Income", values(totals => totals.income), "Filtered period", "#2d7455")}
+    ${metric("Expenses", values(totals => totals.expense), "Filtered period", "#eb765d")}
+    ${metric("Net cash flow", values(totals => totals.income - totals.expense), `${transactionCount} visible transactions`, "#e7c866")}
   </div>`;
 }
-function metric(label, value, foot, dot) {
-  return `<article class="metric"><div class="metric-label"><span>${label}</span><i style="background:${dot || "#2d7455"}"></i></div><div class="metric-value ${value < 0 ? "negative" : ""}">${formatMoney(value)}</div><div class="metric-foot">${foot} · ${state.commodity}</div></article>`;
+function metric(label, values, foot, dot) {
+  const negative = values.length === 1 && values[0].amount < 0;
+  return `<article class="metric"><div class="metric-label"><span>${label}</span><i style="background:${dot || "#2d7455"}"></i></div><div class="metric-value ${negative ? "negative" : ""}">${moneyList(values)}</div><div class="metric-foot">${foot} · ${escapeHtml(commodityLabel())}</div></article>`;
+}
+function commodityStack(reports, content) {
+  if (reports.length === 1) return content(reports[0]);
+  return `<div class="commodity-stack">${reports.map(report => `<section class="commodity-slice"><h4>${escapeHtml(report.commodity)}</h4>${content(report)}</section>`).join("")}</div>`;
 }
 
 function renderOverview() {
   const transactions = filteredTransactions();
-  const data = reportData(transactions);
-  $("#content").innerHTML = `${metricsHtml(data, transactions.length)}
+  const reports = reportViews(transactions);
+  $("#content").innerHTML = `${metricsHtml(reports, transactions.length)}
+    ${conversionNotice(reports)}
     <div class="dashboard-grid">
-      <section class="card"><div class="card-head"><div><h3>Money in & out</h3><span>Monthly activity · ${state.commodity}</span></div><div class="chart-legend"><span><i style="background:#2d7455"></i>Income</span><span><i style="background:#eb765d"></i>Expenses</span></div></div><div class="chart-wrap">${lineChart(transactions)}</div></section>
-      <section class="card"><div class="card-head"><div><h3>Expense map</h3><span>By category</span></div></div>${breakdownHtml(data.byAccount)}</section>
+      <section class="card"><div class="card-head"><div><h3>Money in & out</h3><span>Monthly activity · ${escapeHtml(commodityLabel())}</span></div><div class="chart-legend"><span><i style="background:#2d7455"></i>Income</span><span><i style="background:#eb765d"></i>Expenses</span></div></div>${commodityStack(reports, ({ commodity, converted }) => `<div class="chart-wrap">${lineChart(transactions, commodity, converted)}</div>`)}</section>
+      <section class="card"><div class="card-head"><div><h3>Expense map</h3><span>By category · ${escapeHtml(commodityLabel())}</span></div></div>${commodityStack(reports, ({ commodity, data }) => breakdownHtml(data.byAccount, commodity))}</section>
     </div>
     <section class="card table-card"><div class="card-head"><div><h3>Recent transactions</h3><span>${transactions.length} matching entries</span></div><button class="view-all" data-go="transactions" type="button">View all →</button></div>${transactionTable(transactions.slice(0, 7))}</section>`;
   $("[data-go='transactions']")?.addEventListener("click", () => { state.view = "transactions"; render(); });
 }
 
-function monthlyData(transactions) {
+function monthlyData(transactions, commodity, converted = false) {
   const months = new Map();
-  transactions.forEach(txn => {
-    const month = txn.date.slice(0, 7);
+  const graph = converted ? state.rateGraph : null;
+  transactions.forEach(transaction => {
+    const month = transaction.date.slice(0, 7);
     if (!months.has(month)) months.set(month, { income: 0, expense: 0 });
-    relevantPostings(txn).forEach(posting => {
+    transaction.postings.filter(posting => accountMatchesFilter(posting.account)).forEach(posting => {
       const type = accountType(posting.account);
-      if (type === "income" || type === "expense") months.get(month)[type] += naturalAmount(posting);
+      if (type !== "income" && type !== "expense") return;
+      const rate = converted ? FiscusConversion.findRate(graph, posting.commodity, commodity) : posting.commodity === commodity ? 1 : null;
+      if (rate != null) months.get(month)[type] += naturalAmount(posting) * rate;
     });
   });
   return [...months.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(-8);
 }
-function lineChart(transactions) {
-  const data = monthlyData(transactions);
+function lineChart(transactions, commodity = state.commodity, converted = false) {
+  const data = monthlyData(transactions, commodity, converted);
   if (!data.length) return `<div class="empty">No income or expense activity for this view.</div>`;
   const width = 640, height = 200, padX = 35, padY = 20;
   const max = Math.max(1, ...data.flatMap(([, item]) => [item.income, item.expense]));
@@ -522,11 +585,11 @@ function lineChart(transactions) {
 function expenseAccounts(byAccount) {
   return [...byAccount].filter(([name, value]) => accountType(name) === "expense" && value > 0).sort((a, b) => b[1] - a[1]);
 }
-function breakdownHtml(byAccount) {
+function breakdownHtml(byAccount, commodity = state.commodity) {
   const expenses = expenseAccounts(byAccount).slice(0, 6);
   const max = expenses[0]?.[1] || 1;
   if (!expenses.length) return `<div class="empty">No expenses in this selection.</div>`;
-  return `<div class="breakdown">${expenses.map(([name, amount], index) => `<div class="breakdown-row"><div class="breakdown-label"><i style="background:${colors[index % colors.length]}"></i>${escapeHtml(friendlyAccount(name))}</div><div class="breakdown-amount">${formatMoney(amount)}</div><div class="breakdown-bar"><i style="width:${amount / max * 100}%;background:${colors[index % colors.length]}"></i></div></div>`).join("")}</div>`;
+  return `<div class="breakdown">${expenses.map(([name, amount], index) => `<div class="breakdown-row"><div class="breakdown-label"><i style="background:${colors[index % colors.length]}"></i>${escapeHtml(friendlyAccount(name))}</div><div class="breakdown-amount">${formatMoney(amount, false, commodity)}</div><div class="breakdown-bar"><i style="width:${amount / max * 100}%;background:${colors[index % colors.length]}"></i></div></div>`).join("")}</div>`;
 }
 
 function transactionTable(transactions) {
@@ -540,39 +603,68 @@ function transactionTable(transactions) {
 }
 function formatPosting(posting) {
   const amount = new Intl.NumberFormat("en", { minimumFractionDigits: 2, maximumFractionDigits: 8 }).format(posting.amount);
-  return `${amount} ${posting.commodity || "?"}${posting.valuation ? ` @ ${posting.valuation.amount} ${posting.valuation.commodity}` : ""}`;
+  const native = `${amount} ${posting.commodity || "?"}${posting.valuation ? ` @ ${posting.valuation.amount} ${posting.valuation.commodity}` : ""}`;
+  if (state.valueMode !== "converted") return native;
+  const rate = FiscusConversion.findRate(state.rateGraph, posting.commodity, state.baseCommodity);
+  return rate == null ? `${native} · no ${state.baseCommodity} rate` : `${native} ≈ ${formatMoney(posting.amount * rate, false, state.baseCommodity)}`;
 }
 function renderTransactions() {
   const transactions = filteredTransactions();
   $("#content").innerHTML = `<div class="section-head"><div><h2>Journal activity</h2><p>Every matching entry, newest first.</p></div><small>${transactions.length} OF ${state.journal.transactions.length} TRANSACTIONS</small></div><section class="card">${transactionTable(transactions)}</section>`;
 }
 
-function allAccountBalances() {
+function allAccountBalances(commodity) {
   const transactions = filteredTransactions();
   const values = new Map(state.journal.accounts.map(account => [account.name, 0]));
   transactions.forEach(txn => txn.postings.forEach(posting => {
-    if (posting.commodity !== state.commodity || !accountMatchesFilter(posting.account)) return;
+    if (posting.commodity !== commodity || !accountMatchesFilter(posting.account)) return;
     values.set(posting.account, (values.get(posting.account) || 0) + naturalAmount(posting));
   }));
   return [...values].filter(([name]) => accountMatchesFilter(name)).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
 }
 function renderAccounts() {
-  const balances = allAccountBalances();
-  const active = balances.filter(([, amount]) => amount !== 0);
-  const assets = active.filter(([name]) => accountType(name) === "asset").reduce((sum, [, value]) => sum + value, 0);
-  const liabilities = active.filter(([name]) => accountType(name) === "liability").reduce((sum, [, value]) => sum + value, 0);
-  $("#content").innerHTML = `<div class="account-summary"><div class="summary-tile"><span>Active accounts</span><strong>${active.length}</strong></div><div class="summary-tile"><span>Total assets</span><strong>${formatMoney(assets)}</strong></div><div class="summary-tile"><span>Total liabilities</span><strong>${formatMoney(liabilities)}</strong></div></div>
-  <section class="card"><div class="card-head"><div><h3>Account balances</h3><span>Natural accounting sign · ${state.commodity}</span></div></div><div class="table-wrap"><table><thead><tr><th>Account</th><th>Type</th><th style="text-align:right">Balance</th></tr></thead><tbody>${balances.map(([name, amount]) => `<tr><td class="account-name">${escapeHtml(name)}</td><td><span class="account-type">${escapeHtml(accountType(name))}</span>${escapeHtml(friendlyAccount(name))}</td><td class="${amount < 0 ? "balance-negative" : "balance-positive"}">${formatMoney(amount)}</td></tr>`).join("")}</tbody></table></div></section>`;
+  const accountNames = state.journal.accounts.map(account => account.name).filter(accountMatchesFilter);
+  if (state.valueMode === "converted") {
+    const report = { commodity: state.baseCommodity, converted: true, data: convertedReportData(filteredTransactions()) };
+    const activeNames = accountNames.filter(name => report.data.byAccount.get(name) || report.data.missingAccounts.has(name));
+    const total = type => activeNames.filter(name => accountType(name) === type).reduce((sum, name) => sum + (report.data.byAccount.get(name) || 0), 0);
+    const rows = [...accountNames].sort((a, b) => Math.abs(report.data.byAccount.get(b) || 0) - Math.abs(report.data.byAccount.get(a) || 0)).map(name => {
+      const amount = report.data.byAccount.get(name) || 0;
+      const missing = report.data.missingAccounts.has(name);
+      const value = missing && !report.data.byAccount.has(name)
+        ? `<span class="unconverted">No rate</span>`
+        : `${formatMoney(amount, false, state.baseCommodity)}${missing ? '<small class="unconverted">Partial</small>' : ""}`;
+      return `<tr><td class="account-name">${escapeHtml(name)}</td><td><span class="account-type">${escapeHtml(accountType(name))}</span>${escapeHtml(friendlyAccount(name))}</td><td class="${amount < 0 ? "balance-negative" : "balance-positive"}">${value}</td></tr>`;
+    }).join("");
+    $("#content").innerHTML = `<div class="account-summary"><div class="summary-tile"><span>Active accounts</span><strong>${activeNames.length}</strong></div><div class="summary-tile"><span>Total assets</span><strong>${formatMoney(total("asset"), false, state.baseCommodity)}</strong></div><div class="summary-tile"><span>Total liabilities</span><strong>${formatMoney(total("liability"), false, state.baseCommodity)}</strong></div></div>
+    ${conversionNotice([report])}
+    <section class="card"><div class="card-head"><div><h3>Account balances</h3><span>Latest observed rates · ${escapeHtml(commodityLabel())}</span></div></div><div class="table-wrap"><table><thead><tr><th>Account</th><th>Type</th><th style="text-align:right">Estimated balance</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+    return;
+  }
+
+  const commodities = visibleCommodities();
+  const balancesByCommodity = new Map(commodities.map(commodity => [commodity, new Map(allAccountBalances(commodity))]));
+  const activeNames = accountNames.filter(name => commodities.some(commodity => balancesByCommodity.get(commodity).get(name)));
+  const totals = type => commodities.map(commodity => ({
+    commodity,
+    amount: activeNames.filter(name => accountType(name) === type).reduce((sum, name) => sum + (balancesByCommodity.get(commodity).get(name) || 0), 0)
+  }));
+  const sortedNames = state.commodity
+    ? [...accountNames].sort((a, b) => Math.abs(balancesByCommodity.get(state.commodity).get(b) || 0) - Math.abs(balancesByCommodity.get(state.commodity).get(a) || 0))
+    : [...accountNames].sort();
+  const rows = sortedNames.map(name => {
+    const values = commodities.map(commodity => ({ commodity, amount: balancesByCommodity.get(commodity).get(name) || 0 }));
+    const visibleValues = values.length === 1 ? values : values.filter(({ amount }) => amount !== 0);
+    const singleAmount = values[0]?.amount || 0;
+    const balanceClass = values.length === 1 ? (singleAmount < 0 ? "balance-negative" : "balance-positive") : "balance-multiple";
+    return `<tr><td class="account-name">${escapeHtml(name)}</td><td><span class="account-type">${escapeHtml(accountType(name))}</span>${escapeHtml(friendlyAccount(name))}</td><td class="${balanceClass}">${visibleValues.length ? moneyList(visibleValues) : "—"}</td></tr>`;
+  }).join("");
+  $("#content").innerHTML = `<div class="account-summary"><div class="summary-tile"><span>Active accounts</span><strong>${activeNames.length}</strong></div><div class="summary-tile"><span>Total assets</span><strong>${moneyList(totals("asset"))}</strong></div><div class="summary-tile"><span>Total liabilities</span><strong>${moneyList(totals("liability"))}</strong></div></div>
+  <section class="card"><div class="card-head"><div><h3>Account balances</h3><span>Natural accounting sign · ${escapeHtml(commodityLabel())}</span></div></div><div class="table-wrap"><table><thead><tr><th>Account</th><th>Type</th><th style="text-align:right">Balance</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
 }
 
 function friendlyTrip(tag) {
   return tag.split(":").slice(1).map(part => part.replace(/[-_]/g, " ").replace(/\b\w/g, letter => letter.toUpperCase())).join(" · ");
-}
-
-function tripExpenseTotal(transactions) {
-  return transactions.reduce((total, transaction) => total + relevantPostings(transaction)
-    .filter(posting => accountType(posting.account) === "expense")
-    .reduce((sum, posting) => sum + naturalAmount(posting), 0), 0);
 }
 
 function renderTrips() {
@@ -586,27 +678,28 @@ function renderTrips() {
   const allTripTransactions = prefix => state.journal.transactions.filter(transaction => transactionMatchesTagPrefix(transaction, prefix));
   const transactions = filteredTransactions();
   const chronological = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
-  const data = reportData(transactions);
-  const expenses = expenseAccounts(data.byAccount);
-  const total = expenses.reduce((sum, [, amount]) => sum + amount, 0);
+  const reports = reportViews(transactions);
+  const totals = reports.map(({ commodity, data }) => ({ commodity, amount: expenseAccounts(data.byAccount).reduce((sum, [, amount]) => sum + amount, 0) }));
   const firstDate = chronological[0]?.date;
   const lastDate = chronological.at(-1)?.date;
   const duration = firstDate && lastDate ? Math.round((new Date(`${lastDate}T00:00:00`) - new Date(`${firstDate}T00:00:00`)) / 86400000) + 1 : 0;
-  const topCategory = expenses[0] ? friendlyAccount(expenses[0][0]) : "No expenses yet";
+  const singleExpenses = reports.length === 1 ? expenseAccounts(reports[0].data.byAccount) : [];
+  const topCategory = singleExpenses[0] ? friendlyAccount(singleExpenses[0][0]) : reports.length > 1 ? "See breakdown" : "No expenses yet";
 
   const selector = trips.map(trip => {
     const tripTransactions = allTripTransactions(trip);
-    const tripTotal = tripExpenseTotal(tripTransactions);
-    return `<button class="trip-ticket ${trip === state.trip ? "active" : ""}" data-trip="${escapeHtml(trip)}" type="button"><span>${escapeHtml(friendlyTrip(trip))}</span><small>${tripTransactions.length} ${tripTransactions.length === 1 ? "entry" : "entries"}</small><strong>${formatMoney(tripTotal)}</strong></button>`;
+    const tripTotals = reportViews(tripTransactions).map(({ commodity, data }) => ({ commodity, amount: expenseAccounts(data.byAccount).reduce((sum, [, amount]) => sum + amount, 0) }));
+    return `<button class="trip-ticket ${trip === state.trip ? "active" : ""}" data-trip="${escapeHtml(trip)}" type="button"><span>${escapeHtml(friendlyTrip(trip))}</span><small>${tripTransactions.length} ${tripTransactions.length === 1 ? "entry" : "entries"}</small><strong>${moneyList(tripTotals)}</strong></button>`;
   }).join("");
 
   $("#content").innerHTML = `<div class="trip-switcher" aria-label="Choose a trip">${selector}</div>
+    ${conversionNotice(reports)}
     <section class="trip-hero">
       <div class="trip-route" aria-hidden="true"><i></i><span></span><i></i></div>
-      <div class="trip-kicker">TRIP LEDGER / ${escapeHtml(state.commodity)}</div>
+      <div class="trip-kicker">TRIP LEDGER / ${escapeHtml(commodityLabel())}</div>
       <h2>${escapeHtml(friendlyTrip(state.trip))}</h2>
       <p>${firstDate ? `${escapeHtml(formatDate(firstDate))}${lastDate !== firstDate ? ` — ${escapeHtml(formatDate(lastDate))}` : ""}` : "No matching activity"}</p>
-      <div class="trip-total"><span>Total spent</span><strong>${formatMoney(total)}</strong><small>Across expense accounts</small></div>
+      <div class="trip-total"><span>Total spent</span><strong>${moneyList(totals)}</strong><small>Across expense accounts</small></div>
       <div class="trip-facts">
         <div><span>Entries</span><strong>${transactions.length}</strong></div>
         <div><span>Journey</span><strong>${duration || "—"}${duration ? " days" : ""}</strong></div>
@@ -614,11 +707,11 @@ function renderTrips() {
       </div>
     </section>
     <div class="trip-grid">
-      <section class="card trip-breakdown"><div class="card-head"><div><h3>Where it went</h3><span>Expense accounts · ${escapeHtml(state.commodity)}</span></div></div>${breakdownHtml(data.byAccount)}</section>
+      <section class="card trip-breakdown"><div class="card-head"><div><h3>Where it went</h3><span>Expense accounts · ${escapeHtml(commodityLabel())}</span></div></div>${commodityStack(reports, ({ commodity, data }) => breakdownHtml(data.byAccount, commodity))}</section>
       <section class="card trip-notes"><div class="card-head"><div><h3>Field notes</h3><span>At a glance</span></div></div><div class="trip-note-list">
         <div><span>First entry</span><strong>${firstDate ? escapeHtml(formatDate(firstDate)) : "—"}</strong></div>
         <div><span>Last entry</span><strong>${lastDate ? escapeHtml(formatDate(lastDate)) : "—"}</strong></div>
-        <div><span>Average per entry</span><strong>${transactions.length ? formatMoney(total / transactions.length) : "—"}</strong></div>
+        <div><span>Average per entry</span><strong>${transactions.length ? moneyList(totals.map(({ commodity, amount }) => ({ commodity, amount: amount / transactions.length }))) : "—"}</strong></div>
         <div><span>Tag namespace</span><strong>#${escapeHtml(state.trip)}:*</strong></div>
       </div></section>
     </div>
@@ -630,21 +723,43 @@ function renderTrips() {
   }));
 }
 
-function renderReports() {
-  const transactions = filteredTransactions();
-  const data = reportData(transactions);
+function reportCards(transactions, commodity, data, converted = false) {
   const expenses = expenseAccounts(data.byAccount);
   const expenseTotal = expenses.reduce((sum, [, amount]) => sum + amount, 0);
   let cursor = 0;
   const gradient = expenses.length ? expenses.map(([, amount], index) => { const start = cursor; cursor += amount / expenseTotal * 100; return `${colors[index % colors.length]} ${start}% ${cursor}%`; }).join(",") : "#dfe1d7 0 100%";
-  const rowsFor = type => [...data.byAccount].filter(([name]) => accountType(name) === type).sort((a,b) => Math.abs(b[1])-Math.abs(a[1])).map(([name, amount]) => `<div class="statement-row"><span>${escapeHtml(friendlyAccount(name))}</span><strong>${formatMoney(amount)}</strong></div>`).join("") || `<div class="statement-row"><span>No ${type} activity</span><strong>—</strong></div>`;
-  $("#content").innerHTML = `<div class="section-head"><div><h2>Financial reports</h2><p>Calculated in-browser from ${transactions.length} matching transactions.</p></div><small>COMMODITY · ${state.commodity}</small></div>
-    <div class="report-grid">
-      <section class="card"><div class="card-head"><div><h3>Income statement</h3><span>Revenue and spending</span></div></div><div class="report-statement"><small>INCOME</small>${rowsFor("income")}<div class="statement-row"><span>Total income</span><strong>${formatMoney(data.totals.income)}</strong></div><br><small>EXPENSES</small>${rowsFor("expense")}<div class="statement-row"><span>Total expenses</span><strong>${formatMoney(data.totals.expense)}</strong></div><div class="statement-row total"><span>Net income</span><strong>${formatMoney(data.totals.income - data.totals.expense)}</strong></div></div></section>
-      <section class="card"><div class="card-head"><div><h3>Balance sheet</h3><span>Assets and obligations</span></div></div><div class="report-statement"><small>ASSETS</small>${rowsFor("asset")}<div class="statement-row"><span>Total assets</span><strong>${formatMoney(data.totals.asset)}</strong></div><br><small>LIABILITIES</small>${rowsFor("liability")}<div class="statement-row"><span>Total liabilities</span><strong>${formatMoney(data.totals.liability)}</strong></div><div class="statement-row total"><span>Net position</span><strong>${formatMoney(data.totals.asset - data.totals.liability)}</strong></div></div></section>
-      <section class="card"><div class="card-head"><div><h3>Expense composition</h3><span>Share of total spending</span></div></div><div class="donut-section"><div class="donut" style="background:conic-gradient(${gradient})"><div class="donut-center"><strong>${formatMoney(expenseTotal, true)}</strong><small>Total</small></div></div><div class="legend-list">${expenses.slice(0,7).map(([name, amount], index) => `<div class="legend-item"><i style="background:${colors[index % colors.length]}"></i><span>${escapeHtml(friendlyAccount(name))}</span><strong>${expenseTotal ? Math.round(amount / expenseTotal * 100) : 0}%</strong></div>`).join("") || "No expenses"}</div></div></section>
-      <section class="card"><div class="card-head"><div><h3>Monthly trend</h3><span>Income vs expenses</span></div></div><div class="chart-wrap">${lineChart(transactions)}</div></section>
-    </div>`;
+  const rowsFor = type => [...data.byAccount].filter(([name]) => accountType(name) === type).sort((a,b) => Math.abs(b[1])-Math.abs(a[1])).map(([name, amount]) => `<div class="statement-row"><span>${escapeHtml(friendlyAccount(name))}</span><strong>${formatMoney(amount, false, commodity)}</strong></div>`).join("") || `<div class="statement-row"><span>No ${type} activity</span><strong>—</strong></div>`;
+  return `<div class="report-grid">
+    <section class="card"><div class="card-head"><div><h3>Income statement</h3><span>Revenue and spending</span></div></div><div class="report-statement"><small>INCOME</small>${rowsFor("income")}<div class="statement-row"><span>Total income</span><strong>${formatMoney(data.totals.income, false, commodity)}</strong></div><br><small>EXPENSES</small>${rowsFor("expense")}<div class="statement-row"><span>Total expenses</span><strong>${formatMoney(data.totals.expense, false, commodity)}</strong></div><div class="statement-row total"><span>Net income</span><strong>${formatMoney(data.totals.income - data.totals.expense, false, commodity)}</strong></div></div></section>
+    <section class="card"><div class="card-head"><div><h3>Balance sheet</h3><span>Assets and obligations</span></div></div><div class="report-statement"><small>ASSETS</small>${rowsFor("asset")}<div class="statement-row"><span>Total assets</span><strong>${formatMoney(data.totals.asset, false, commodity)}</strong></div><br><small>LIABILITIES</small>${rowsFor("liability")}<div class="statement-row"><span>Total liabilities</span><strong>${formatMoney(data.totals.liability, false, commodity)}</strong></div><div class="statement-row total"><span>Net position</span><strong>${formatMoney(data.totals.asset - data.totals.liability, false, commodity)}</strong></div></div></section>
+    <section class="card"><div class="card-head"><div><h3>Expense composition</h3><span>Share of total spending</span></div></div><div class="donut-section"><div class="donut" style="background:conic-gradient(${gradient})"><div class="donut-center"><strong>${formatMoney(expenseTotal, true, commodity)}</strong><small>Total</small></div></div><div class="legend-list">${expenses.slice(0,7).map(([name, amount], index) => `<div class="legend-item"><i style="background:${colors[index % colors.length]}"></i><span>${escapeHtml(friendlyAccount(name))}</span><strong>${expenseTotal ? Math.round(amount / expenseTotal * 100) : 0}%</strong></div>`).join("") || "No expenses"}</div></div></section>
+    <section class="card"><div class="card-head"><div><h3>Monthly trend</h3><span>Income vs expenses</span></div></div><div class="chart-wrap">${lineChart(transactions, commodity, converted)}</div></section>
+  </div>`;
+}
+
+function renderReports() {
+  const transactions = filteredTransactions();
+  const reports = reportViews(transactions);
+  const description = state.valueMode === "converted"
+    ? `Estimated using the latest observed rates from @@ valuations. Historical amounts use those same latest rates.`
+    : `Calculated in-browser from ${transactions.length} matching transactions. Currencies are never combined without a valuation.`;
+  $("#content").innerHTML = `<div class="section-head"><div><h2>Financial reports</h2><p>${description}</p></div><small>COMMODITY · ${escapeHtml(commodityLabel())}</small></div>
+    ${conversionNotice(reports)}
+    ${reports.map(({ commodity, data, converted }) => `<section class="currency-report">${reports.length > 1 ? `<h3>${escapeHtml(commodity)}</h3>` : ""}${reportCards(transactions, commodity, data, converted)}</section>`).join("")}`;
+}
+
+async function loadServedJournal() {
+  try {
+    const response = await fetch("/api/journal", { cache: "no-store" });
+    if (response.status === 404) return;
+    if (!response.ok) throw new Error((await response.text()).trim() || `Could not load journal (${response.status})`);
+    const payload = await response.json();
+    if (!Array.isArray(payload.files) || !payload.files.length) throw new Error("The journal server returned no source files.");
+    const documents = payload.files.map(file => parseDocument(file.text, file.path));
+    loadJournal(combineDocuments(documents));
+  } catch (error) {
+    showToast(error.message, 6500);
+  }
 }
 
 function showWelcome() { $("#dashboard").hidden = true; $("#welcome").hidden = false; $("#file-input").value = ""; $("#journal-file-input").value = ""; }
@@ -671,8 +786,20 @@ $("#open-new").addEventListener("click", showWelcome);
 $("#replace-file").addEventListener("click", () => $("#file-input").click());
 $$(".nav-item").forEach(button => button.addEventListener("click", () => { state.view = button.dataset.view; render(); }));
 $("#account-filter").addEventListener("change", event => { state.account = event.target.value; render(); });
-$("#commodity-filter").addEventListener("change", event => { state.commodity = event.target.value; render(); });
+$("#commodity-filter").addEventListener("change", event => {
+  if (state.valueMode === "converted") state.baseCommodity = event.target.value;
+  else state.commodity = event.target.value;
+  render();
+});
+$("#value-mode").addEventListener("click", event => {
+  const button = event.target.closest("[data-mode]");
+  if (!button || button.dataset.mode === state.valueMode) return;
+  state.valueMode = button.dataset.mode;
+  populateCommodityFilter();
+  render();
+});
 $("#tag-chips").addEventListener("click", event => { const button = event.target.closest("[data-tag]"); if (!button) return; state.tag = button.dataset.tag; $$(".tag-chip").forEach(chip => chip.classList.toggle("active", chip === button)); render(); });
 $("#search-input").addEventListener("input", event => { state.search = event.target.value; if (["overview", "transactions", "trips"].includes(state.view)) render(); });
 $("#clear-filters").addEventListener("click", () => { state.account = ""; state.tag = ""; state.search = ""; $("#account-filter").value = ""; $("#search-input").value = ""; $$(".tag-chip").forEach(chip => chip.classList.toggle("active", chip.dataset.tag === "")); render(); });
 document.addEventListener("keydown", event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); $("#search-input").focus(); } });
+loadServedJournal();

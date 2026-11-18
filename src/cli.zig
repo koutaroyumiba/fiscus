@@ -1,11 +1,13 @@
 const std = @import("std");
 const fiscus = @import("fiscus");
 const render = @import("cli_render.zig");
+const web_server = @import("web_server.zig");
 
 const Command = enum {
     check,
     balance,
     inspect,
+    web,
 };
 
 pub fn run(
@@ -27,6 +29,8 @@ pub fn run(
             .balance
         else if (std.mem.eql(u8, args[1], "inspect"))
             .inspect
+        else if (std.mem.eql(u8, args[1], "web"))
+            .web
         else {
             try writeUsage(stderr);
             return 2;
@@ -45,6 +49,9 @@ pub fn run(
     var inspect_to: ?fiscus.ledger.Date = null;
     var inspect_tag: ?[]const u8 = null;
     var inspect_running_balance = false;
+
+    var web_port: u16 = 0;
+    var web_open_browser = true;
 
     switch (command) {
         .check => {
@@ -201,6 +208,45 @@ pub fn run(
                 return 2;
             }
         },
+        .web => {
+            var index: usize = 2;
+            if (index < args.len and !std.mem.startsWith(u8, args[index], "--")) {
+                file_name = args[index];
+                index += 1;
+            }
+
+            while (index < args.len) {
+                if (std.mem.eql(u8, args[index], "--port")) {
+                    if (index + 1 >= args.len) {
+                        try writeUsage(stderr);
+                        return 2;
+                    }
+                    web_port = std.fmt.parseInt(u16, args[index + 1], 10) catch {
+                        try stderr.print("fis: invalid port '{s}'\n", .{args[index + 1]});
+                        return 2;
+                    };
+                    index += 2;
+                } else if (std.mem.eql(u8, args[index], "--no-open")) {
+                    web_open_browser = false;
+                    index += 1;
+                } else {
+                    try writeUsage(stderr);
+                    return 2;
+                }
+            }
+        },
+    }
+
+    if (command == .web) {
+        return web_server.run(
+            allocator,
+            io,
+            file_name,
+            web_port,
+            web_open_browser,
+            stdout,
+            stderr,
+        );
     }
 
     var application = fiscus.application.Application.load(
@@ -302,6 +348,7 @@ pub fn run(
                 try render.writeInspect(stdout, journal, &report);
             }
         },
+        .web => unreachable,
     }
 
     return 0;
@@ -317,6 +364,7 @@ fn writeUsage(writer: *std.Io.Writer) !void {
         \\  fis check [file]
         \\  fis balance [file] [--prefix <account>] [--sort account|amount] [--tag <tag> | --tag-prefix <prefix>]
         \\  fis inspect [file] [--id <id>] [--account <account>] [--from <date>] [--to <date>] [--tag <tag>] [--running-balance]
+        \\  fis web [file] [--port <port>] [--no-open]
         \\
     );
 }

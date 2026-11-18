@@ -101,10 +101,15 @@ select { max-width: 220px; padding: 6px 25px 6px 8px; border: 0; border-bottom: 
 .tag-chips { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; }
 .tag-chip { padding: 5px 9px; white-space: nowrap; border: 1px solid var(--line); border-radius: 20px; background: transparent; font: 500 8px var(--mono); cursor: pointer; }
 .tag-chip:hover, .tag-chip.active { color: white; border-color: var(--green); background: var(--green); }
-.commodity-control { margin-left: auto; }
+.value-mode { display: inline-flex; margin-left: auto; padding: 2px; border: 1px solid var(--line); background: #efeee6; }
+.value-mode button { padding: 5px 9px; border: 0; color: #788178; background: transparent; font: 500 8px var(--mono); text-transform: uppercase; cursor: pointer; }
+.value-mode button.active { color: white; background: var(--green); }
+.commodity-control { margin-left: 0; }
 .clear-filter { border: 0; border-bottom: 1px solid transparent; color: var(--green-2); background: transparent; font: 500 8px var(--mono); text-transform: uppercase; cursor: pointer; }
 .clear-filter:hover { border-color: currentColor; }
 .notice { margin: 20px clamp(25px, 3vw, 48px) 0; padding: 12px 15px; color: #70402e; background: #f7dfcc; border-left: 3px solid var(--coral); font: 400 10px/1.5 var(--mono); }
+.conversion-note { display: flex; align-items: baseline; gap: 12px; margin: 14px 0 18px; padding: 11px 14px; color: #70402e; background: #f7dfcc; border-left: 3px solid var(--coral); font: 400 9px/1.5 var(--mono); }
+.conversion-note strong { text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
 .content { padding: clamp(28px, 3vw, 46px); }
 
 /* Shared view components */
@@ -120,12 +125,20 @@ select { max-width: 220px; padding: 6px 25px 6px 8px; border: 0; border-bottom: 
 .metric-label i { width: 7px; height: 7px; border-radius: 50%; background: var(--green-2); }
 .metric-value { margin-top: 23px; font: 500 clamp(22px, 2vw, 30px)/1 var(--serif); letter-spacing: -.025em; white-space: nowrap; }
 .metric-value.negative { color: var(--coral); }
+.currency-values { display: inline-flex; flex-direction: column; gap: 5px; max-width: 100%; vertical-align: top; }
+.currency-values > span { display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; white-space: nowrap; }
+.currency-values small { color: #7d867e; font: 500 7px var(--mono); letter-spacing: .08em; }
+.metric-value .currency-values { align-items: flex-start; }
+.metric-value .currency-values > span { justify-content: flex-start; }
 .metric-foot { margin-top: 11px; color: #879087; font: 400 8px var(--mono); }
 .dashboard-grid { display: grid; grid-template-columns: minmax(0,1.45fr) minmax(290px,.65fr); gap: 18px; margin-top: 18px; }
 .card { background: var(--panel); border: 1px solid var(--line); animation: rise .5s .08s both; }
 .card-head { min-height: 66px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
 .card-head h3 { margin: 0; font: 600 17px var(--serif); }
 .card-head span { color: #7f877f; font: 400 8px var(--mono); }
+.commodity-stack { display: grid; }
+.commodity-slice + .commodity-slice { border-top: 1px solid var(--line); }
+.commodity-slice > h4 { margin: 0; padding: 10px 20px; color: var(--green-2); background: #f4f3eb; font: 600 8px var(--mono); letter-spacing: .12em; }
 .chart-wrap { height: 255px; padding: 22px 18px 14px; }
 .chart { width: 100%; height: 100%; overflow: visible; }
 .chart-grid { stroke: #deded3; stroke-width: 1; stroke-dasharray: 2 4; }
@@ -175,6 +188,10 @@ tbody tr:hover { background: #f7f6ef; }
 .account-type { display: inline-block; min-width: 58px; margin-right: 9px; padding: 4px 6px; color: var(--ink-soft); background: #ecece3; border-radius: 2px; text-align: center; font: 500 7px var(--mono); text-transform: uppercase; }
 .balance-positive { color: var(--green-2); font: 500 10px var(--mono); text-align: right; }
 .balance-negative { color: var(--coral); font: 500 10px var(--mono); text-align: right; }
+.balance-multiple { font: 500 10px var(--mono); text-align: right; }
+.unconverted { display: block; margin-top: 3px; color: var(--coral); font: 500 7px var(--mono); text-align: right; text-transform: uppercase; letter-spacing: .06em; }
+.currency-report + .currency-report { margin-top: 30px; padding-top: 24px; border-top: 1px solid var(--line); }
+.currency-report > h3 { margin: 0 0 12px; color: var(--green-2); font: 600 10px var(--mono); letter-spacing: .14em; }
 .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .report-statement { padding: 20px; }
 .statement-row { display: flex; justify-content: space-between; gap: 20px; padding: 12px 0; border-bottom: 1px solid #e0e0d5; font-size: 10px; }
@@ -198,6 +215,13 @@ tbody tr:hover { background: #f7f6ef; }
 .trip-ticket span { font: 600 14px var(--serif); }
 .trip-ticket small { grid-column: 1; color: #7d867e; font: 400 7px var(--mono); text-transform: uppercase; }
 .trip-ticket strong { grid-column: 2; grid-row: 1 / span 2; align-self: center; font: 500 11px var(--mono); }
+.trip-ticket .currency-values { gap: 2px; }
+.trip-ticket .currency-values > span { font: inherit; }
+.trip-ticket .currency-values small { color: inherit; opacity: .65; }
+.trip-total .currency-values { gap: 3px; }
+.trip-total strong .currency-values > span { color: var(--lime); font: inherit; text-transform: none; letter-spacing: normal; }
+.trip-total .currency-values small { color: #b7c9bc; }
+.trip-note-list strong .currency-values > span { color: inherit; font: inherit; text-transform: none; }
 .trip-ticket:hover { transform: translateY(-2px); border-color: var(--green-2); }
 .trip-ticket.active { color: white; background: var(--green); border-color: var(--green); box-shadow: inset 0 -3px 0 var(--lime); }
 .trip-ticket.active small { color: #c5d6ca; }
@@ -264,6 +288,7 @@ tbody tr:hover { background: #f7f6ef; }
   .search-box:focus-within input { display: block; }
   .filterbar { align-items: flex-start; gap: 13px; padding: 12px 20px; flex-wrap: wrap; }
   .tag-filter { order: 3; width: 100%; }
+  .value-mode { margin-left: 0; }
   .commodity-control { margin-left: 0; }
   .clear-filter { margin-left: auto; }
   .content { padding: 25px 20px; }

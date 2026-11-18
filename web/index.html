@@ -94,7 +94,11 @@
       <div class="filterbar">
         <label class="select-control"><span>Account</span><select id="account-filter" aria-label="Filter by account"><option value="">All accounts</option></select></label>
         <div class="tag-filter"><span>Tags</span><div id="tag-chips" class="tag-chips"><button class="tag-chip active" data-tag="" type="button">All</button></div></div>
-        <label class="select-control commodity-control"><span>Currency</span><select id="commodity-filter" aria-label="Choose report commodity"></select></label>
+        <div id="value-mode" class="value-mode" aria-label="Value display mode">
+          <button class="active" data-mode="native" type="button" aria-pressed="true">Native</button>
+          <button data-mode="converted" type="button" aria-pressed="false">Converted</button>
+        </div>
+        <label class="select-control commodity-control"><span id="commodity-label">Currency</span><select id="commodity-filter" aria-label="Choose report commodity"></select></label>
         <button id="clear-filters" class="clear-filter" type="button">Clear filters</button>
       </div>
 
@@ -104,6 +108,7 @@
   </section>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="conversion.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

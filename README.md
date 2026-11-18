@@ -27,14 +27,25 @@ It was a lot of fun to think about the syntax for this language and how to go ab
 
 ## Browser viewer
 
-A private, dependency-free journal viewer is available in [`web/`](web/). It parses files entirely in the browser and provides transaction search, account/tag filters, account balances, and visual reports.
+A private, dependency-free journal viewer is available in [`web/`](web/). It provides transaction search, account/tag filters, account balances, and visual reports. Native commodity views keep values separate; the converted view estimates everything in a selected base currency using the latest rates observed in `@@` valuations.
+
+Launch it from a journal directory to load `journal.fiscus` automatically:
+
+```sh
+fis web
+# use a different journal, port, or do not open the browser automatically
+fis web path/to/journal.fiscus --port 8080 --no-open
+```
+
+The server binds only to `127.0.0.1`. Refresh the browser to reload the journal and all of its workspace sources from disk. Stop the server with `Ctrl-C`.
+
+The standalone viewer remains available without the CLI:
 
 ```sh
 python3 -m http.server 8080 -d web
-# open http://localhost:8080
 ```
 
-Drop a complete Fiscus workspace folder onto the viewer (nested transaction folders are supported), choose a folder, or select individual `.fiscus` files together. No journal data is uploaded or persisted.
+Drop a complete Fiscus workspace folder onto the standalone viewer (nested transaction folders are supported), choose a folder, or select individual `.fiscus` files together. No journal data is uploaded or persisted.
 
 ## Current Features (implemented)
 
@@ -78,6 +89,9 @@ fis inspect examples/personal.fiscus --tag income
 
 # show account changes and running balances
 fis inspect examples/personal.fiscus --account asset:bank:example-bank:au:everyday --running-balance
+
+# launch the local web viewer and load ./journal.fiscus
+fis web
 ```
 
 Running balances use the account's natural accounting sign and include earlier transactions when `--from` filters the displayed entries.

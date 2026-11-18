@@ -13,6 +13,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const vaxis_mod = vaxis.module("vaxis");
+    const web_assets_mod = b.createModule(.{
+        .root_source_file = b.path("web/assets.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // === CLI EXE
     const exe = b.addExecutable(.{
@@ -24,6 +29,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "fiscus", .module = mod },
                 .{ .name = "vaxis", .module = vaxis_mod },
+                .{ .name = "web_assets", .module = web_assets_mod },
             },
         }),
     });
